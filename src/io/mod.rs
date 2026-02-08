@@ -11,6 +11,10 @@ pub use csv_io::{read_csv, read_csv_from_bytes, write_csv};
 pub use json_io::{read_json, read_json_from_bytes, write_json};
 pub use excel_io::{read_excel, read_excel_from_bytes, write_excel};
 
+pub(crate) use csv_io::{parse_csv_lenient, EditableTreeRow};
+pub(crate) use json_io::parse_json_lenient;
+pub(crate) use excel_io::parse_excel_lenient;
+
 /// Trait for reading forest inventory data from a file.
 pub trait InventoryReader {
     fn read(&self, path: &Path) -> Result<ForestInventory, ForestError>;

@@ -2,6 +2,16 @@ use serde::{Deserialize, Serialize};
 
 use super::volume::VolumeEquation;
 
+/// A single validation issue found during lenient validation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationIssue {
+    pub plot_id: u32,
+    pub tree_id: u32,
+    pub row_index: usize,
+    pub field: String,
+    pub message: String,
+}
+
 /// Status of a tree in the inventory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TreeStatus {
@@ -166,6 +176,66 @@ impl Tree {
             }
         }
         Ok(())
+    }
+
+    /// Validate tree measurements leniently, collecting all issues instead of
+    /// failing on the first error.
+    pub fn validate_all(&self, row_index: usize) -> Vec<ValidationIssue> {
+        let mut issues = Vec::new();
+
+        if self.dbh <= 0.0 {
+            issues.push(ValidationIssue {
+                plot_id: self.plot_id,
+                tree_id: self.tree_id,
+                row_index,
+                field: "dbh".to_string(),
+                message: format!("DBH must be positive, got {}", self.dbh),
+            });
+        }
+        if let Some(h) = self.height {
+            if h <= 0.0 {
+                issues.push(ValidationIssue {
+                    plot_id: self.plot_id,
+                    tree_id: self.tree_id,
+                    row_index,
+                    field: "height".to_string(),
+                    message: format!("Height must be positive, got {}", h),
+                });
+            }
+        }
+        if let Some(cr) = self.crown_ratio {
+            if !(0.0..=1.0).contains(&cr) {
+                issues.push(ValidationIssue {
+                    plot_id: self.plot_id,
+                    tree_id: self.tree_id,
+                    row_index,
+                    field: "crown_ratio".to_string(),
+                    message: format!("Crown ratio must be in 0.0..=1.0, got {}", cr),
+                });
+            }
+        }
+        if self.expansion_factor <= 0.0 {
+            issues.push(ValidationIssue {
+                plot_id: self.plot_id,
+                tree_id: self.tree_id,
+                row_index,
+                field: "expansion_factor".to_string(),
+                message: format!("Expansion factor must be positive, got {}", self.expansion_factor),
+            });
+        }
+        if let Some(d) = self.defect {
+            if !(0.0..=1.0).contains(&d) {
+                issues.push(ValidationIssue {
+                    plot_id: self.plot_id,
+                    tree_id: self.tree_id,
+                    row_index,
+                    field: "defect".to_string(),
+                    message: format!("Defect must be in 0.0..=1.0, got {}", d),
+                });
+            }
+        }
+
+        issues
     }
 }
 

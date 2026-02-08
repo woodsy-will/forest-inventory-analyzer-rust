@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::analysis::{Analyzer, GrowthModel};
 use crate::error::ForestError;
-use crate::io;
+use crate::io::{self, EditableTreeRow};
+use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue};
 
 use super::state::AppState;
 
@@ -65,7 +66,84 @@ struct UploadResponse {
     name: String,
     num_plots: usize,
     num_trees: usize,
+    has_errors: bool,
+    errors: Vec<ValidationIssue>,
+    trees: Vec<EditableTreeRow>,
     species: Vec<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Convert flat editable rows into a `ForestInventory`.
+fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestInventory {
+    let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
+
+    for row in rows {
+        let status: TreeStatus = row.status.parse().unwrap_or(TreeStatus::Live);
+        let tree = Tree {
+            tree_id: row.tree_id,
+            plot_id: row.plot_id,
+            species: Species {
+                code: row.species_code.clone(),
+                common_name: row.species_name.clone(),
+            },
+            dbh: row.dbh,
+            height: row.height,
+            crown_ratio: row.crown_ratio,
+            status,
+            expansion_factor: row.expansion_factor,
+            age: row.age,
+            defect: row.defect,
+        };
+
+        let plot = plots.entry(row.plot_id).or_insert_with(|| Plot {
+            plot_id: row.plot_id,
+            plot_size_acres: row.plot_size_acres.unwrap_or(0.2),
+            slope_percent: row.slope_percent,
+            aspect_degrees: row.aspect_degrees,
+            elevation_ft: row.elevation_ft,
+            trees: Vec::new(),
+        });
+
+        plot.trees.push(tree);
+    }
+
+    let mut inventory = ForestInventory::new(name);
+    let mut plot_list: Vec<Plot> = plots.into_values().collect();
+    plot_list.sort_by_key(|p| p.plot_id);
+    inventory.plots = plot_list;
+    inventory
+}
+
+/// Collect unique species names from editable rows.
+fn species_from_rows(rows: &[EditableTreeRow]) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut species = Vec::new();
+    for row in rows {
+        if seen.insert(row.species_name.clone()) {
+            species.push(row.species_name.clone());
+        }
+    }
+    species
+}
+
+/// Count distinct plot IDs in editable rows.
+fn num_plots_from_rows(rows: &[EditableTreeRow]) -> usize {
+    rows.iter()
+        .map(|r| r.plot_id)
+        .collect::<std::collections::HashSet<_>>()
+        .len()
+}
+
+/// Sanitize a filename for use in Content-Disposition headers.
+/// Removes characters that could enable header injection or path traversal.
+fn sanitize_filename(name: &str) -> String {
+    name.chars()
+        .filter(|c| c.is_alphanumeric() || *c == '-' || *c == '_' || *c == '.' || *c == ' ')
+        .collect::<String>()
+        .replace("..", "")
 }
 
 // ---------------------------------------------------------------------------
@@ -99,10 +177,10 @@ pub async fn upload(
             .unwrap_or(&filename)
             .to_string();
 
-        let inventory = match ext.as_str() {
-            "csv" => io::read_csv_from_bytes(&bytes, &name)?,
-            "json" => io::read_json_from_bytes(&bytes, &name)?,
-            "xlsx" | "xls" => io::read_excel_from_bytes(&bytes, &name)?,
+        let (inv_name, rows, issues) = match ext.as_str() {
+            "csv" => io::parse_csv_lenient(&bytes, &name)?,
+            "json" => io::parse_json_lenient(&bytes, &name)?,
+            "xlsx" | "xls" => io::parse_excel_lenient(&bytes, &name)?,
             _ => {
                 return Ok(HttpResponse::BadRequest().json(ErrorBody {
                     error: "Bad Request".to_string(),
@@ -112,23 +190,151 @@ pub async fn upload(
         };
 
         let id = Uuid::new_v4();
-        let resp = UploadResponse {
-            id,
-            name: inventory.name.clone(),
-            num_plots: inventory.num_plots(),
-            num_trees: inventory.num_trees(),
-            species: inventory.species_list().into_iter().map(|s| s.common_name).collect(),
-        };
+        let has_errors = !issues.is_empty();
 
-        state.inventories.lock().unwrap().insert(id, inventory);
-
-        return Ok(HttpResponse::Ok().json(resp));
+        if has_errors {
+            // Store pending rows for later revalidation
+            let resp = UploadResponse {
+                id,
+                name: inv_name.clone(),
+                num_plots: num_plots_from_rows(&rows),
+                num_trees: rows.len(),
+                has_errors: true,
+                errors: issues,
+                trees: rows.clone(),
+                species: species_from_rows(&rows),
+            };
+            state.insert_pending(id, inv_name, rows);
+            return Ok(HttpResponse::Ok().json(resp));
+        } else {
+            // No errors — build inventory and store it
+            let inventory = rows_to_inventory(&inv_name, &rows);
+            let resp = UploadResponse {
+                id,
+                name: inventory.name.clone(),
+                num_plots: inventory.num_plots(),
+                num_trees: inventory.num_trees(),
+                has_errors: false,
+                errors: vec![],
+                trees: vec![],
+                species: inventory
+                    .species_list()
+                    .into_iter()
+                    .map(|s| s.common_name)
+                    .collect(),
+            };
+            state.insert_inventory(id, inventory);
+            return Ok(HttpResponse::Ok().json(resp));
+        }
     }
 
     Ok(HttpResponse::BadRequest().json(ErrorBody {
         error: "Bad Request".to_string(),
         details: "No file uploaded".to_string(),
     }))
+}
+
+// ---------------------------------------------------------------------------
+// Validate & submit endpoint
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct ValidateRequest {
+    id: Uuid,
+    trees: Vec<EditableTreeRow>,
+}
+
+pub async fn validate_and_submit(
+    state: web::Data<AppState>,
+    body: web::Json<ValidateRequest>,
+) -> Result<HttpResponse, WebError> {
+    // Reject requests for unknown IDs — must come from a prior upload
+    if !state.has_pending(&body.id) {
+        return Ok(HttpResponse::NotFound().json(ErrorBody {
+            error: "Not Found".to_string(),
+            details: format!("No pending upload found for id {}", body.id),
+        }));
+    }
+
+    let mut all_issues = Vec::new();
+
+    for row in &body.trees {
+        // Check status validity
+        if row.status.parse::<TreeStatus>().is_err() {
+            all_issues.push(ValidationIssue {
+                plot_id: row.plot_id,
+                tree_id: row.tree_id,
+                row_index: row.row_index,
+                field: "status".to_string(),
+                message: format!("Unknown tree status '{}'", row.status),
+            });
+        }
+
+        // Build a Tree to validate
+        let status: TreeStatus = row.status.parse().unwrap_or(TreeStatus::Live);
+        let tree = Tree {
+            tree_id: row.tree_id,
+            plot_id: row.plot_id,
+            species: Species {
+                code: row.species_code.clone(),
+                common_name: row.species_name.clone(),
+            },
+            dbh: row.dbh,
+            height: row.height,
+            crown_ratio: row.crown_ratio,
+            status,
+            expansion_factor: row.expansion_factor,
+            age: row.age,
+            defect: row.defect,
+        };
+
+        all_issues.extend(tree.validate_all(row.row_index));
+    }
+
+    let has_errors = !all_issues.is_empty();
+
+    if has_errors {
+        // Update pending rows, preserving the original name
+        let name = state
+            .get_pending_name(&body.id)
+            .unwrap_or_else(|| "Unknown".to_string());
+        state.insert_pending(body.id, name.clone(), body.trees.clone());
+
+        let resp = UploadResponse {
+            id: body.id,
+            name,
+            num_plots: num_plots_from_rows(&body.trees),
+            num_trees: body.trees.len(),
+            has_errors: true,
+            errors: all_issues,
+            trees: body.trees.clone(),
+            species: species_from_rows(&body.trees),
+        };
+        Ok(HttpResponse::Ok().json(resp))
+    } else {
+        // Clean — build inventory, move from pending to inventories
+        let name = state
+            .remove_pending(&body.id)
+            .map(|(n, _)| n)
+            .unwrap_or_else(|| "Unknown".to_string());
+        let inventory = rows_to_inventory(&name, &body.trees);
+        let resp = UploadResponse {
+            id: body.id,
+            name: inventory.name.clone(),
+            num_plots: inventory.num_plots(),
+            num_trees: inventory.num_trees(),
+            has_errors: false,
+            errors: vec![],
+            trees: vec![],
+            species: inventory
+                .species_list()
+                .into_iter()
+                .map(|s| s.common_name)
+                .collect(),
+        };
+        state.insert_inventory(body.id, inventory);
+        Ok(HttpResponse::Ok().json(resp))
+    }
 }
 
 pub async fn metrics(
@@ -230,17 +436,19 @@ pub async fn export(
             let data = wtr.into_inner().map_err(|e| WebError(ForestError::Io(
                 std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
             )))?;
+            let safe_name = sanitize_filename(&inventory.name);
             Ok(HttpResponse::Ok()
                 .content_type("text/csv")
-                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.csv\"", inventory.name)))
+                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.csv\"", safe_name)))
                 .body(data))
         }
         "json" => {
             let data = serde_json::to_string_pretty(&inventory)
                 .map_err(|e| WebError(ForestError::Json(e)))?;
+            let safe_name = sanitize_filename(&inventory.name);
             Ok(HttpResponse::Ok()
                 .content_type("application/json")
-                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.json\"", inventory.name)))
+                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.json\"", safe_name)))
                 .body(data))
         }
         _ => Ok(HttpResponse::BadRequest().json(ErrorBody {

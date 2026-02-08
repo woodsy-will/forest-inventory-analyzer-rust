@@ -4,7 +4,9 @@ use calamine::{open_workbook, DataType, Reader, Xlsx};
 use rust_xlsxwriter::Workbook;
 
 use crate::error::ForestError;
-use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus};
+use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue};
+
+use super::csv_io::EditableTreeRow;
 
 /// Read forest inventory data from an Excel (.xlsx) file.
 ///
@@ -221,4 +223,116 @@ pub fn write_excel(
         .map_err(|e| ForestError::Excel(e.to_string()))?;
 
     Ok(())
+}
+
+/// Parse Excel leniently: write bytes to temp file, read with calamine,
+/// build editable rows, validate all, collect issues.
+pub(crate) fn parse_excel_lenient(
+    data: &[u8],
+    name: &str,
+) -> Result<(String, Vec<EditableTreeRow>, Vec<ValidationIssue>), ForestError> {
+    use std::io::Write;
+    let mut tmp = tempfile::NamedTempFile::new()?;
+    tmp.write_all(data)?;
+    tmp.flush()?;
+
+    let mut workbook: Xlsx<_> = open_workbook(tmp.path())?;
+
+    let sheet_name = workbook
+        .sheet_names()
+        .first()
+        .cloned()
+        .ok_or_else(|| ForestError::Excel("No sheets found in workbook".to_string()))?;
+
+    let range = workbook
+        .worksheet_range(&sheet_name)
+        .map_err(|e| ForestError::Excel(e.to_string()))?;
+
+    let mut rows_out = Vec::new();
+    let mut issues = Vec::new();
+    let mut excel_rows = range.rows();
+
+    // Skip header row
+    excel_rows.next();
+
+    let mut row_index: usize = 0;
+    for row in excel_rows {
+        if row.len() < 9 {
+            continue;
+        }
+
+        let get_f64 = |idx: usize| -> f64 {
+            row.get(idx)
+                .and_then(|c| c.get_float())
+                .unwrap_or(0.0)
+        };
+
+        let get_opt_f64 = |idx: usize| -> Option<f64> {
+            row.get(idx).and_then(|c| c.get_float())
+        };
+
+        let get_string = |idx: usize| -> String {
+            row.get(idx)
+                .map(|c| c.to_string())
+                .unwrap_or_default()
+        };
+
+        let plot_id = get_f64(0) as u32;
+        let tree_id = get_f64(1) as u32;
+        let status_str = get_string(7);
+        let status: TreeStatus = match status_str.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                issues.push(ValidationIssue {
+                    plot_id,
+                    tree_id,
+                    row_index,
+                    field: "status".to_string(),
+                    message: format!("Unknown tree status '{}', defaulting to Live", status_str),
+                });
+                TreeStatus::Live
+            }
+        };
+
+        let tree = Tree {
+            tree_id,
+            plot_id,
+            species: Species {
+                code: get_string(2),
+                common_name: get_string(3),
+            },
+            dbh: get_f64(4),
+            height: get_opt_f64(5),
+            crown_ratio: get_opt_f64(6),
+            status: status.clone(),
+            expansion_factor: get_f64(8),
+            age: get_opt_f64(9).map(|v| v as u32),
+            defect: get_opt_f64(10),
+        };
+
+        issues.extend(tree.validate_all(row_index));
+
+        rows_out.push(EditableTreeRow {
+            row_index,
+            plot_id,
+            tree_id,
+            species_code: get_string(2),
+            species_name: get_string(3),
+            dbh: get_f64(4),
+            height: get_opt_f64(5),
+            crown_ratio: get_opt_f64(6),
+            status: status.to_string(),
+            expansion_factor: get_f64(8),
+            age: get_opt_f64(9).map(|v| v as u32),
+            defect: get_opt_f64(10),
+            plot_size_acres: get_opt_f64(11),
+            slope_percent: get_opt_f64(12),
+            aspect_degrees: get_opt_f64(13),
+            elevation_ft: get_opt_f64(14),
+        });
+
+        row_index += 1;
+    }
+
+    Ok((name.to_string(), rows_out, issues))
 }

@@ -52,24 +52,32 @@ async function uploadFile(file) {
         const data = await res.json();
         currentId = data.id;
 
-        // Populate summary bar
-        document.getElementById('inv-name').textContent = data.name;
-        document.getElementById('stat-plots').textContent = data.num_plots;
-        document.getElementById('stat-trees').textContent = data.num_trees;
-        document.getElementById('stat-species').textContent = data.species.length;
-
-        // Show dashboard, hide upload
-        document.getElementById('upload-section').hidden = true;
-        document.getElementById('dashboard').hidden = false;
-
-        // Load data in parallel
-        await Promise.all([loadMetrics(), loadDistribution(), loadStatistics()]);
-        // Auto-run growth with defaults
-        await runGrowth();
+        if (data.has_errors) {
+            showErrorEditor(data);
+        } else {
+            showDashboard(data);
+        }
     } catch (e) {
         uploadError.textContent = e.message;
         uploadError.hidden = false;
     }
+}
+
+function showDashboard(data) {
+    // Populate summary bar
+    document.getElementById('inv-name').textContent = data.name;
+    document.getElementById('stat-plots').textContent = data.num_plots;
+    document.getElementById('stat-trees').textContent = data.num_trees;
+    document.getElementById('stat-species').textContent = data.species.length;
+
+    // Show dashboard, hide others
+    document.getElementById('upload-section').hidden = true;
+    document.getElementById('error-editor').hidden = true;
+    document.getElementById('dashboard').hidden = false;
+
+    // Load data in parallel
+    Promise.all([loadMetrics(), loadDistribution(), loadStatistics()])
+        .then(() => runGrowth());
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +379,186 @@ function exportData(format) {
     window.location.href = `/api/${currentId}/export?format=${format}`;
 }
 
-// Expose runGrowth and exportData to HTML onclick handlers
+// ---------------------------------------------------------------------------
+// Error Editor
+// ---------------------------------------------------------------------------
+
+function showErrorEditor(data) {
+    document.getElementById('upload-section').hidden = true;
+    document.getElementById('dashboard').hidden = true;
+    document.getElementById('error-editor').hidden = false;
+
+    renderErrorList(data.errors);
+    renderEditTable(data.trees);
+    highlightErrorCells(data.errors);
+}
+
+function renderErrorList(errors) {
+    const el = document.getElementById('error-list');
+    document.getElementById('error-count').textContent = errors.length + ' error' + (errors.length !== 1 ? 's' : '') + ' found';
+    el.innerHTML = '';
+    for (const e of errors) {
+        const badge = document.createElement('span');
+        badge.className = 'error-badge';
+        const strong = document.createElement('strong');
+        strong.textContent = 'Row ' + (e.row_index + 1);
+        badge.appendChild(strong);
+        badge.appendChild(document.createTextNode(
+            ' Plot ' + e.plot_id + ', Tree ' + e.tree_id + ' \u2014 ' + e.field + ': ' + e.message
+        ));
+        el.appendChild(badge);
+    }
+}
+
+const EDIT_FIELDS = [
+    { key: 'plot_id', label: 'Plot ID', type: 'number' },
+    { key: 'tree_id', label: 'Tree ID', type: 'number' },
+    { key: 'species_code', label: 'Sp. Code', type: 'text' },
+    { key: 'species_name', label: 'Species', type: 'text' },
+    { key: 'dbh', label: 'DBH', type: 'number', step: '0.1' },
+    { key: 'height', label: 'Height', type: 'number', step: '0.1', optional: true },
+    { key: 'crown_ratio', label: 'Crown Ratio', type: 'number', step: '0.01', optional: true },
+    { key: 'status', label: 'Status', type: 'select', options: ['Live', 'Dead', 'Cut', 'Missing'] },
+    { key: 'expansion_factor', label: 'Exp. Factor', type: 'number', step: '0.1' },
+    { key: 'age', label: 'Age', type: 'number', optional: true },
+    { key: 'defect', label: 'Defect', type: 'number', step: '0.01', optional: true },
+    { key: 'plot_size_acres', label: 'Plot Acres', type: 'number', step: '0.01', optional: true },
+];
+
+function renderEditTable(trees) {
+    const thead = document.getElementById('edit-table-head');
+    const tbody = document.getElementById('edit-table-body');
+
+    thead.innerHTML = '<tr>' + EDIT_FIELDS.map(f => `<th>${f.label}</th>`).join('') + '</tr>';
+    tbody.innerHTML = '';
+
+    for (const tree of trees) {
+        const tr = document.createElement('tr');
+        tr.dataset.row = tree.row_index;
+        // Preserve hidden fields that aren't shown in the table
+        tr._hiddenFields = {
+            slope_percent: tree.slope_percent,
+            aspect_degrees: tree.aspect_degrees,
+            elevation_ft: tree.elevation_ft,
+        };
+
+        for (const f of EDIT_FIELDS) {
+            const td = document.createElement('td');
+            td.dataset.field = f.key;
+
+            if (f.type === 'select') {
+                const sel = document.createElement('select');
+                sel.dataset.row = tree.row_index;
+                sel.dataset.field = f.key;
+                for (const opt of f.options) {
+                    const o = document.createElement('option');
+                    o.value = opt;
+                    o.textContent = opt;
+                    if (tree[f.key] === opt) o.selected = true;
+                    sel.appendChild(o);
+                }
+                td.appendChild(sel);
+            } else {
+                const inp = document.createElement('input');
+                inp.type = f.type;
+                inp.dataset.row = tree.row_index;
+                inp.dataset.field = f.key;
+                if (f.step) inp.step = f.step;
+                const val = tree[f.key];
+                inp.value = (val === null || val === undefined) ? '' : val;
+                td.appendChild(inp);
+            }
+
+            tr.appendChild(td);
+        }
+
+        tbody.appendChild(tr);
+    }
+}
+
+function highlightErrorCells(errors) {
+    // Clear previous highlights
+    document.querySelectorAll('.error-cell').forEach(el => el.classList.remove('error-cell'));
+
+    for (const err of errors) {
+        const td = document.querySelector(
+            `#edit-table-body tr[data-row="${err.row_index}"] td[data-field="${err.field}"]`
+        );
+        if (td) td.classList.add('error-cell');
+    }
+}
+
+function collectTableData() {
+    const tbody = document.getElementById('edit-table-body');
+    const rows = [];
+    for (const tr of tbody.querySelectorAll('tr')) {
+        const rowIdx = parseInt(tr.dataset.row);
+        const row = { row_index: rowIdx };
+        for (const f of EDIT_FIELDS) {
+            const el = tr.querySelector(`[data-field="${f.key}"]`);
+            if (!el) continue;
+            const input = el.tagName === 'INPUT' || el.tagName === 'SELECT' ? el : el.querySelector('input, select');
+            if (!input) continue;
+            const val = input.value.trim();
+            if (f.type === 'number') {
+                if (val === '') {
+                    row[f.key] = f.optional ? null : 0;
+                } else {
+                    const isInt = f.key === 'age' || f.key === 'plot_id' || f.key === 'tree_id';
+                    const parsed = isInt ? parseInt(val, 10) : parseFloat(val);
+                    // Preserve NaN as 0 only for required fields — server will catch
+                    // the validation error for nonsensical values like 0 DBH
+                    row[f.key] = Number.isNaN(parsed) ? 0 : parsed;
+                }
+            } else {
+                row[f.key] = val;
+            }
+        }
+        // Carry forward hidden fields from the original data
+        row.slope_percent = tr._hiddenFields ? tr._hiddenFields.slope_percent : null;
+        row.aspect_degrees = tr._hiddenFields ? tr._hiddenFields.aspect_degrees : null;
+        row.elevation_ft = tr._hiddenFields ? tr._hiddenFields.elevation_ft : null;
+        rows.push(row);
+    }
+    return rows;
+}
+
+async function revalidateData() {
+    const trees = collectTableData();
+    try {
+        const res = await fetch('/api/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentId, trees })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.details || err.error);
+        }
+        const data = await res.json();
+        currentId = data.id;
+
+        if (data.has_errors) {
+            renderErrorList(data.errors);
+            highlightErrorCells(data.errors);
+        } else {
+            showDashboard(data);
+        }
+    } catch (e) {
+        document.getElementById('error-count').textContent = 'Error: ' + e.message;
+    }
+}
+
+function startOver() {
+    document.getElementById('error-editor').hidden = true;
+    document.getElementById('dashboard').hidden = true;
+    document.getElementById('upload-section').hidden = false;
+    fileInput.value = '';
+    currentId = null;
+}
+
+// Expose runGrowth, exportData, and editor functions to HTML onclick handlers
 window.runGrowth = runGrowth;
 window.exportData = exportData;
+window.revalidateData = revalidateData;
+window.startOver = startOver;

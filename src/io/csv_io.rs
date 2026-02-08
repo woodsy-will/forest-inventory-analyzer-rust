@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::Path;
 
 use crate::error::ForestError;
-use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus};
+use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue};
 
 /// CSV row structure for tree data.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -134,4 +134,106 @@ pub fn write_csv(inventory: &ForestInventory, path: impl AsRef<Path>) -> Result<
 
     wtr.flush()?;
     Ok(())
+}
+
+/// Flat, editable representation of a tree row for the web editor.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct EditableTreeRow {
+    pub row_index: usize,
+    pub plot_id: u32,
+    pub tree_id: u32,
+    pub species_code: String,
+    pub species_name: String,
+    pub dbh: f64,
+    pub height: Option<f64>,
+    pub crown_ratio: Option<f64>,
+    pub status: String,
+    pub expansion_factor: f64,
+    pub age: Option<u32>,
+    pub defect: Option<f64>,
+    pub plot_size_acres: Option<f64>,
+    pub slope_percent: Option<f64>,
+    pub aspect_degrees: Option<f64>,
+    pub elevation_ft: Option<f64>,
+}
+
+/// Parse CSV leniently: collect all validation issues instead of failing on the first.
+///
+/// CSV **format** errors (missing columns, type mismatches) are still fatal.
+/// Returns all rows (including invalid ones) + all validation issues.
+pub(crate) fn parse_csv_lenient(
+    data: &[u8],
+    name: &str,
+) -> Result<(String, Vec<EditableTreeRow>, Vec<ValidationIssue>), ForestError> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_reader(data);
+
+    let mut rows = Vec::new();
+    let mut issues = Vec::new();
+    let mut row_index: usize = 0;
+
+    for result in rdr.deserialize() {
+        let csv_row: TreeRow = result?;
+
+        // Try to parse status; default to "Live" on error and record issue
+        let status_str = csv_row.status.clone();
+        let status: TreeStatus = match status_str.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                issues.push(ValidationIssue {
+                    plot_id: csv_row.plot_id,
+                    tree_id: csv_row.tree_id,
+                    row_index,
+                    field: "status".to_string(),
+                    message: format!("Unknown tree status '{}', defaulting to Live", status_str),
+                });
+                TreeStatus::Live
+            }
+        };
+
+        let tree = Tree {
+            tree_id: csv_row.tree_id,
+            plot_id: csv_row.plot_id,
+            species: Species {
+                common_name: csv_row.species_name.clone(),
+                code: csv_row.species_code.clone(),
+            },
+            dbh: csv_row.dbh,
+            height: csv_row.height,
+            crown_ratio: csv_row.crown_ratio,
+            status: status.clone(),
+            expansion_factor: csv_row.expansion_factor,
+            age: csv_row.age,
+            defect: csv_row.defect,
+        };
+
+        // Validate leniently
+        issues.extend(tree.validate_all(row_index));
+
+        rows.push(EditableTreeRow {
+            row_index,
+            plot_id: csv_row.plot_id,
+            tree_id: csv_row.tree_id,
+            species_code: csv_row.species_code,
+            species_name: csv_row.species_name,
+            dbh: csv_row.dbh,
+            height: csv_row.height,
+            crown_ratio: csv_row.crown_ratio,
+            status: status.to_string(),
+            expansion_factor: csv_row.expansion_factor,
+            age: csv_row.age,
+            defect: csv_row.defect,
+            plot_size_acres: csv_row.plot_size_acres,
+            slope_percent: csv_row.slope_percent,
+            aspect_degrees: csv_row.aspect_degrees,
+            elevation_ft: csv_row.elevation_ft,
+        });
+
+        row_index += 1;
+    }
+
+    Ok((name.to_string(), rows, issues))
 }

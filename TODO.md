@@ -18,13 +18,13 @@
 
 ## Priority 3: Extensibility & Future-Proofing
 
-- [ ] **Define I/O traits for reader/writer abstraction** — Create `InventoryReader` and `InventoryWriter` traits that `csv_io`, `json_io`, and `excel_io` implement. This enables adding new formats (GeoJSON, SQLite, Shapefile) without modifying existing code, and allows consumers to implement custom readers.
+- [x] **Define I/O traits for reader/writer abstraction** — Create `InventoryReader` and `InventoryWriter` traits that `csv_io`, `json_io`, and `excel_io` implement. This enables adding new formats (GeoJSON, SQLite, Shapefile) without modifying existing code, and allows consumers to implement custom readers.
 
-- [ ] **Group analysis functions under a configurable struct** — Currently `compute_stand_metrics()`, `SamplingStatistics::compute()`, and `project_growth()` are standalone functions. An `Analyzer` struct could hold default configuration (confidence level, diameter class width, growth model) and provide a unified API.
+- [x] **Group analysis functions under a configurable struct** — Currently `compute_stand_metrics()`, `SamplingStatistics::compute()`, and `project_growth()` are standalone functions. An `Analyzer` struct could hold default configuration (confidence level, diameter class width, growth model) and provide a unified API.
 
-- [ ] **Add visualization tests** — `tables.rs` and `charts.rs` have no tests. Capture stdout output in tests to verify table formatting and histogram rendering don't panic and produce expected content structure.
+- [x] **Add visualization tests** — `tables.rs` and `charts.rs` have no tests. Capture stdout output in tests to verify table formatting and histogram rendering don't panic and produce expected content structure.
 
-- [ ] **Add CLI integration tests** — No tests for `main.rs` CLI argument parsing or subcommand dispatch. Use `assert_cmd` or similar crate to test that the binary handles valid/invalid inputs correctly.
+- [x] **Add CLI integration tests** — No tests for `main.rs` CLI argument parsing or subcommand dispatch. Use `assert_cmd` or similar crate to test that the binary handles valid/invalid inputs correctly.
 
 ## Priority 4: Documentation & Polish
 

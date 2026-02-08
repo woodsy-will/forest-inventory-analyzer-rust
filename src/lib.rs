@@ -6,3 +6,5 @@ pub mod visualization;
 
 pub use error::ForestError;
 pub use models::{ForestInventory, Plot, Species, Tree, TreeStatus, VolumeEquation};
+pub use io::{InventoryReader, InventoryWriter};
+pub use analysis::Analyzer;

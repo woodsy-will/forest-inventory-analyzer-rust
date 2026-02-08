@@ -34,21 +34,21 @@
 
 ### Architecture Review Notes (from code review)
 
-**Remaining medium-priority issues:**
+**Medium-priority issues (resolved):**
 
-- [ ] **Unify `validate` and `validate_all`** — Both methods in `tree.rs` duplicate the same 5 checks. Implement `validate_all` as canonical, then have `validate()` call it and return the first issue as `Err`. Prevents drift when adding new constraints.
+- [x] **Unify `validate` and `validate_all`** — `validate()` now delegates to `validate_all()` and returns the first issue as `Err`. Single source of truth for all validation checks.
 
-- [ ] **Move `rows_to_inventory` to `io` module** — This helper in `handlers.rs` is effectively a fourth parser. It belongs in `io/` alongside the other data transformation functions to keep the web layer thin.
+- [x] **Move `rows_to_inventory` to `io` module** — Moved from `handlers.rs` to `csv_io.rs`, re-exported via `io/mod.rs`. Web layer no longer owns data transformation logic.
 
-- [ ] **Consistent strict parsing for status** — `csv_io::parse_csv_records` rejects unknown status as a fatal error, but `excel_io::read_excel` silently defaults to Live with a `log::warn!`. Both strict parsers should behave the same way.
+- [x] **Consistent strict parsing for status** — `excel_io::read_excel` now rejects unknown status as a fatal `ParseError`, matching `csv_io::parse_csv_records` behavior.
 
-- [ ] **Add `NotFound` variant to `ForestError`** — Inventory-not-found currently uses `ForestError::ParseError`, which maps to HTTP 400. Should be a dedicated variant mapping to HTTP 404.
+- [x] **Add `NotFound` variant to `ForestError`** — Added `NotFound(String)` variant mapped to HTTP 404. All inventory-not-found errors now use it instead of `ParseError`.
 
-- [ ] **Handle Mutex poisoning gracefully** — `state.rs` methods use `.unwrap()` on `Mutex::lock()`. Replace with `.expect()` or propagate the error to prevent panic cascades if a thread panics while holding a lock.
+- [x] **Handle Mutex poisoning gracefully** — Replaced `.unwrap()` with `.expect("descriptive message")` on all `Mutex::lock()` calls in `state.rs`.
 
-- [ ] **Generate `ValidationIssue` for skipped Excel rows** — Both `read_excel` and `parse_excel_lenient` silently skip rows with <9 columns. The lenient parser should record these as issues instead of dropping data.
+- [x] **Generate `ValidationIssue` for skipped Excel rows** — `parse_excel_lenient` now records a `ValidationIssue` for rows with <9 columns instead of silently dropping them.
 
-- [ ] **Use `Path` for filename parsing in upload handler** — `rsplit('.')` gives wrong stem for multi-dot filenames like `my.data.csv`. Use `Path::new(&filename).file_stem()` / `.extension()`.
+- [x] **Use `Path` for filename parsing in upload handler** — Replaced `rsplit('.')` with `Path::file_stem()` / `Path::extension()` for correct multi-dot filename handling.
 
 **Lower-priority / nice-to-have:**
 

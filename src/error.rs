@@ -26,6 +26,9 @@ pub enum ForestError {
 
     #[error("Insufficient data: {0}")]
     InsufficientData(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
 }
 
 impl From<calamine::Error> for ForestError {

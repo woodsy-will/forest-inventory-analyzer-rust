@@ -58,12 +58,7 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
         let plot_id = get_f64(0) as u32;
         let tree_id = get_f64(1) as u32;
         let status_str = get_string(7);
-        let status: TreeStatus = status_str.parse().unwrap_or_else(|_| {
-            log::warn!(
-                "Plot {plot_id}, Tree {tree_id}: unknown status '{status_str}', defaulting to Live"
-            );
-            TreeStatus::Live
-        });
+        let status: TreeStatus = status_str.parse()?;
 
         let tree = Tree {
             tree_id,
@@ -258,6 +253,17 @@ pub(crate) fn parse_excel_lenient(
     let mut row_index: usize = 0;
     for row in excel_rows {
         if row.len() < 9 {
+            issues.push(ValidationIssue {
+                plot_id: 0,
+                tree_id: 0,
+                row_index,
+                field: "row".to_string(),
+                message: format!(
+                    "Row has only {} columns (minimum 9 required), skipped",
+                    row.len()
+                ),
+            });
+            row_index += 1;
             continue;
         }
 

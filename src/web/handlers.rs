@@ -6,8 +6,8 @@ use uuid::Uuid;
 
 use crate::analysis::{Analyzer, GrowthModel};
 use crate::error::ForestError;
-use crate::io::{self, EditableTreeRow};
-use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue};
+use crate::io::{self, EditableTreeRow, rows_to_inventory};
+use crate::models::{Species, Tree, TreeStatus, ValidationIssue};
 
 use super::state::AppState;
 
@@ -42,6 +42,9 @@ impl actix_web::ResponseError for WebError {
             ForestError::ValidationError(_) | ForestError::ParseError(_) => {
                 (actix_web::http::StatusCode::BAD_REQUEST, "Bad Request")
             }
+            ForestError::NotFound(_) => {
+                (actix_web::http::StatusCode::NOT_FOUND, "Not Found")
+            }
             ForestError::InsufficientData(_) => {
                 (actix_web::http::StatusCode::UNPROCESSABLE_ENTITY, "Unprocessable Entity")
             }
@@ -75,47 +78,6 @@ struct UploadResponse {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/// Convert flat editable rows into a `ForestInventory`.
-fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestInventory {
-    let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
-
-    for row in rows {
-        let status: TreeStatus = row.status.parse().unwrap_or(TreeStatus::Live);
-        let tree = Tree {
-            tree_id: row.tree_id,
-            plot_id: row.plot_id,
-            species: Species {
-                code: row.species_code.clone(),
-                common_name: row.species_name.clone(),
-            },
-            dbh: row.dbh,
-            height: row.height,
-            crown_ratio: row.crown_ratio,
-            status,
-            expansion_factor: row.expansion_factor,
-            age: row.age,
-            defect: row.defect,
-        };
-
-        let plot = plots.entry(row.plot_id).or_insert_with(|| Plot {
-            plot_id: row.plot_id,
-            plot_size_acres: row.plot_size_acres.unwrap_or(0.2),
-            slope_percent: row.slope_percent,
-            aspect_degrees: row.aspect_degrees,
-            elevation_ft: row.elevation_ft,
-            trees: Vec::new(),
-        });
-
-        plot.trees.push(tree);
-    }
-
-    let mut inventory = ForestInventory::new(name);
-    let mut plot_list: Vec<Plot> = plots.into_values().collect();
-    plot_list.sort_by_key(|p| p.plot_id);
-    inventory.plots = plot_list;
-    inventory
-}
 
 /// Collect unique species names from editable rows.
 fn species_from_rows(rows: &[EditableTreeRow]) -> Vec<String> {
@@ -165,15 +127,16 @@ pub async fn upload(
             bytes.extend_from_slice(&chunk);
         }
 
-        let ext = filename
-            .rsplit('.')
-            .next()
+        let path = std::path::Path::new(&filename);
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
             .unwrap_or("")
             .to_lowercase();
 
-        let name = filename
-            .rsplit('.')
-            .nth(1)
+        let name = path
+            .file_stem()
+            .and_then(|s| s.to_str())
             .unwrap_or(&filename)
             .to_string();
 
@@ -343,7 +306,7 @@ pub async fn metrics(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     let analyzer = Analyzer::new(&inventory);
     Ok(HttpResponse::Ok().json(analyzer.stand_metrics()))
@@ -361,7 +324,7 @@ pub async fn statistics(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     let confidence = query.confidence.unwrap_or(0.95);
     let analyzer = Analyzer::new(&inventory);
@@ -381,7 +344,7 @@ pub async fn distribution(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     let class_width = query.class_width.unwrap_or(2.0);
     let analyzer = Analyzer::new(&inventory);
@@ -401,7 +364,7 @@ pub async fn growth(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     let analyzer = Analyzer::new(&inventory);
     let projections = analyzer.project_growth(&body.model, body.years)?;
@@ -420,7 +383,7 @@ pub async fn export(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     let fmt = query.format.as_deref().unwrap_or("csv");
 
@@ -505,7 +468,7 @@ pub async fn inventory_json(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::ParseError(format!("Inventory {id} not found")))
+        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
     })?;
     Ok(HttpResponse::Ok().json(inventory))
 }

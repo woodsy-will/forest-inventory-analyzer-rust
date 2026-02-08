@@ -157,6 +157,47 @@ pub struct EditableTreeRow {
     pub elevation_ft: Option<f64>,
 }
 
+/// Convert flat editable rows into a `ForestInventory`.
+pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestInventory {
+    let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
+
+    for row in rows {
+        let status: TreeStatus = row.status.parse().unwrap_or(TreeStatus::Live);
+        let tree = Tree {
+            tree_id: row.tree_id,
+            plot_id: row.plot_id,
+            species: Species {
+                code: row.species_code.clone(),
+                common_name: row.species_name.clone(),
+            },
+            dbh: row.dbh,
+            height: row.height,
+            crown_ratio: row.crown_ratio,
+            status,
+            expansion_factor: row.expansion_factor,
+            age: row.age,
+            defect: row.defect,
+        };
+
+        let plot = plots.entry(row.plot_id).or_insert_with(|| Plot {
+            plot_id: row.plot_id,
+            plot_size_acres: row.plot_size_acres.unwrap_or(0.2),
+            slope_percent: row.slope_percent,
+            aspect_degrees: row.aspect_degrees,
+            elevation_ft: row.elevation_ft,
+            trees: Vec::new(),
+        });
+
+        plot.trees.push(tree);
+    }
+
+    let mut inventory = ForestInventory::new(name);
+    let mut plot_list: Vec<Plot> = plots.into_values().collect();
+    plot_list.sort_by_key(|p| p.plot_id);
+    inventory.plots = plot_list;
+    inventory
+}
+
 /// Parse CSV leniently: collect all validation issues instead of failing on the first.
 ///
 /// CSV **format** errors (missing columns, type mismatches) are still fatal.

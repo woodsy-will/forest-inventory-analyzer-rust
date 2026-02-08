@@ -137,43 +137,15 @@ impl Tree {
         self.status == TreeStatus::Live
     }
 
-    /// Validate tree measurements. Returns `ForestError::ValidationError` on failure.
+    /// Validate tree measurements. Returns the first `ForestError::ValidationError` found.
+    ///
+    /// Delegates to `validate_all()` so both paths share the same checks.
     pub fn validate(&self) -> Result<(), crate::error::ForestError> {
-        if self.dbh <= 0.0 {
+        if let Some(issue) = self.validate_all(0).into_iter().next() {
             return Err(crate::error::ForestError::ValidationError(format!(
-                "Plot {}, Tree {}: DBH must be positive, got {}",
-                self.plot_id, self.tree_id, self.dbh
+                "Plot {}, Tree {}: {}",
+                issue.plot_id, issue.tree_id, issue.message
             )));
-        }
-        if let Some(h) = self.height {
-            if h <= 0.0 {
-                return Err(crate::error::ForestError::ValidationError(format!(
-                    "Plot {}, Tree {}: height must be positive, got {}",
-                    self.plot_id, self.tree_id, h
-                )));
-            }
-        }
-        if let Some(cr) = self.crown_ratio {
-            if !(0.0..=1.0).contains(&cr) {
-                return Err(crate::error::ForestError::ValidationError(format!(
-                    "Plot {}, Tree {}: crown_ratio must be in 0.0..=1.0, got {}",
-                    self.plot_id, self.tree_id, cr
-                )));
-            }
-        }
-        if self.expansion_factor <= 0.0 {
-            return Err(crate::error::ForestError::ValidationError(format!(
-                "Plot {}, Tree {}: expansion_factor must be positive, got {}",
-                self.plot_id, self.tree_id, self.expansion_factor
-            )));
-        }
-        if let Some(d) = self.defect {
-            if !(0.0..=1.0).contains(&d) {
-                return Err(crate::error::ForestError::ValidationError(format!(
-                    "Plot {}, Tree {}: defect must be in 0.0..=1.0, got {}",
-                    self.plot_id, self.tree_id, d
-                )));
-            }
         }
         Ok(())
     }
@@ -199,7 +171,7 @@ impl Tree {
                     tree_id: self.tree_id,
                     row_index,
                     field: "height".to_string(),
-                    message: format!("Height must be positive, got {}", h),
+                    message: format!("height must be positive, got {}", h),
                 });
             }
         }
@@ -210,7 +182,7 @@ impl Tree {
                     tree_id: self.tree_id,
                     row_index,
                     field: "crown_ratio".to_string(),
-                    message: format!("Crown ratio must be in 0.0..=1.0, got {}", cr),
+                    message: format!("crown_ratio must be in 0.0..=1.0, got {}", cr),
                 });
             }
         }
@@ -220,7 +192,7 @@ impl Tree {
                 tree_id: self.tree_id,
                 row_index,
                 field: "expansion_factor".to_string(),
-                message: format!("Expansion factor must be positive, got {}", self.expansion_factor),
+                message: format!("expansion_factor must be positive, got {}", self.expansion_factor),
             });
         }
         if let Some(d) = self.defect {
@@ -230,7 +202,7 @@ impl Tree {
                     tree_id: self.tree_id,
                     row_index,
                     field: "defect".to_string(),
-                    message: format!("Defect must be in 0.0..=1.0, got {}", d),
+                    message: format!("defect must be in 0.0..=1.0, got {}", d),
                 });
             }
         }

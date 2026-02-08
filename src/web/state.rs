@@ -30,13 +30,13 @@ impl AppState {
     }
 
     pub fn get_inventory(&self, id: &Uuid) -> Option<ForestInventory> {
-        let mut map = self.inventories.lock().unwrap();
+        let mut map = self.inventories.lock().expect("inventories mutex poisoned");
         evict_expired_inventories(&mut map);
         map.get(id).map(|(_, inv)| inv.clone())
     }
 
     pub fn insert_inventory(&self, id: Uuid, inventory: ForestInventory) {
-        let mut map = self.inventories.lock().unwrap();
+        let mut map = self.inventories.lock().expect("inventories mutex poisoned");
         evict_expired_inventories(&mut map);
         if map.len() >= MAX_INVENTORIES {
             evict_oldest_inventory(&mut map);
@@ -45,19 +45,19 @@ impl AppState {
     }
 
     pub fn get_pending_name(&self, id: &Uuid) -> Option<String> {
-        let mut map = self.pending_rows.lock().unwrap();
+        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
         evict_expired_pending(&mut map);
         map.get(id).map(|(_, name, _)| name.clone())
     }
 
     pub fn has_pending(&self, id: &Uuid) -> bool {
-        let mut map = self.pending_rows.lock().unwrap();
+        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
         evict_expired_pending(&mut map);
         map.contains_key(id)
     }
 
     pub fn insert_pending(&self, id: Uuid, name: String, rows: Vec<EditableTreeRow>) {
-        let mut map = self.pending_rows.lock().unwrap();
+        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
         evict_expired_pending(&mut map);
         if map.len() >= MAX_PENDING {
             evict_oldest_pending(&mut map);
@@ -66,7 +66,7 @@ impl AppState {
     }
 
     pub fn remove_pending(&self, id: &Uuid) -> Option<(String, Vec<EditableTreeRow>)> {
-        let mut map = self.pending_rows.lock().unwrap();
+        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
         evict_expired_pending(&mut map);
         map.remove(id).map(|(_, name, rows)| (name, rows))
     }

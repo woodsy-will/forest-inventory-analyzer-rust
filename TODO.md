@@ -52,9 +52,9 @@
 
 **Lower-priority / nice-to-have:**
 
-- [ ] **Error editor UX improvements** — Add loading spinner on "Validate & Save", confirmation dialog on "Start Over", click-to-jump on error badges, and table `<caption>` + `aria-label` on inputs for accessibility.
+- [x] **Error editor UX improvements** — Add loading spinner on "Validate & Save", confirmation dialog on "Start Over", click-to-jump on error badges, and table `<caption>` + `aria-label` on inputs for accessibility.
 
-- [ ] **Mobile responsiveness for editor table** — The 12-column edit table is unusable on narrow screens. Consider column hiding or a card-based layout on mobile.
+- [x] **Mobile responsiveness for editor table** — The 12-column edit table is unusable on narrow screens. Consider column hiding or a card-based layout on mobile.
 
 ## Priority 5: Documentation & Polish
 

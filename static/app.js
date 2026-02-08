@@ -400,14 +400,34 @@ function renderErrorList(errors) {
     for (const e of errors) {
         const badge = document.createElement('span');
         badge.className = 'error-badge';
+        badge.setAttribute('role', 'listitem');
+        badge.title = 'Click to jump to this cell';
         const strong = document.createElement('strong');
         strong.textContent = 'Row ' + (e.row_index + 1);
         badge.appendChild(strong);
         badge.appendChild(document.createTextNode(
             ' Plot ' + e.plot_id + ', Tree ' + e.tree_id + ' \u2014 ' + e.field + ': ' + e.message
         ));
+        // Click-to-jump: scroll to the error cell and highlight the row
+        badge.addEventListener('click', () => jumpToErrorCell(e.row_index, e.field));
         el.appendChild(badge);
     }
+}
+
+function jumpToErrorCell(rowIndex, field) {
+    const td = document.querySelector(
+        `#edit-table-body tr[data-row="${rowIndex}"] td[data-field="${field}"]`
+    );
+    if (!td) return;
+    const tr = td.closest('tr');
+    // Scroll into view
+    td.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // Focus the input/select inside the cell
+    const input = td.querySelector('input, select');
+    if (input) setTimeout(() => input.focus(), 300);
+    // Briefly highlight the row
+    tr.classList.add('highlight-row');
+    setTimeout(() => tr.classList.remove('highlight-row'), 1500);
 }
 
 const EDIT_FIELDS = [
@@ -445,11 +465,15 @@ function renderEditTable(trees) {
         for (const f of EDIT_FIELDS) {
             const td = document.createElement('td');
             td.dataset.field = f.key;
+            td.dataset.label = f.label; // for mobile card layout
+
+            const ariaLabel = f.label + ' for row ' + (tree.row_index + 1);
 
             if (f.type === 'select') {
                 const sel = document.createElement('select');
                 sel.dataset.row = tree.row_index;
                 sel.dataset.field = f.key;
+                sel.setAttribute('aria-label', ariaLabel);
                 for (const opt of f.options) {
                     const o = document.createElement('option');
                     o.value = opt;
@@ -463,6 +487,7 @@ function renderEditTable(trees) {
                 inp.type = f.type;
                 inp.dataset.row = tree.row_index;
                 inp.dataset.field = f.key;
+                inp.setAttribute('aria-label', ariaLabel);
                 if (f.step) inp.step = f.step;
                 const val = tree[f.key];
                 inp.value = (val === null || val === undefined) ? '' : val;
@@ -524,6 +549,10 @@ function collectTableData() {
 }
 
 async function revalidateData() {
+    const btn = document.getElementById('validate-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
     const trees = collectTableData();
     try {
         const res = await fetch('/api/validate', {
@@ -546,10 +575,14 @@ async function revalidateData() {
         }
     } catch (e) {
         document.getElementById('error-count').textContent = 'Error: ' + e.message;
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
     }
 }
 
 function startOver() {
+    if (!confirm('Discard all edits and start over with a new file?')) return;
     document.getElementById('error-editor').hidden = true;
     document.getElementById('dashboard').hidden = true;
     document.getElementById('upload-section').hidden = false;

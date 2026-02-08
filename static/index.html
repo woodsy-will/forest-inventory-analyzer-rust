@@ -32,18 +32,19 @@
         </section>
 
         <!-- Error Editor (hidden until validation errors) -->
-        <section id="error-editor" hidden>
+        <section id="error-editor" hidden aria-label="Data validation editor">
             <div class="error-editor-card">
                 <div class="error-summary-bar">
-                    <span class="error-count" id="error-count">0 errors found</span>
+                    <span class="error-count" id="error-count" aria-live="polite">0 errors found</span>
                     <div class="error-editor-actions">
-                        <button class="btn-primary" onclick="revalidateData()">Validate &amp; Save</button>
+                        <button class="btn-primary" id="validate-btn" onclick="revalidateData()">Validate &amp; Save</button>
                         <button class="btn-secondary" onclick="startOver()">Start Over</button>
                     </div>
                 </div>
-                <div class="error-list" id="error-list"></div>
+                <div class="error-list" id="error-list" role="list" aria-label="Validation errors"></div>
                 <div class="edit-table-wrapper">
                     <table class="edit-table" id="edit-table">
+                        <caption class="sr-only">Editable tree inventory data</caption>
                         <thead id="edit-table-head"></thead>
                         <tbody id="edit-table-body"></tbody>
                     </table>

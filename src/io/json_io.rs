@@ -15,6 +15,20 @@ pub fn read_json(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError>
     Ok(inventory)
 }
 
+/// Read forest inventory data from JSON bytes.
+pub fn read_json_from_bytes(data: &[u8], name: &str) -> Result<ForestInventory, ForestError> {
+    let content = std::str::from_utf8(data)
+        .map_err(|e| ForestError::ParseError(format!("Invalid UTF-8: {e}")))?;
+    let mut inventory: ForestInventory = serde_json::from_str(content)?;
+    for plot in &inventory.plots {
+        for tree in &plot.trees {
+            tree.validate()?;
+        }
+    }
+    inventory.name = name.to_string();
+    Ok(inventory)
+}
+
 /// Write forest inventory data to a JSON file.
 pub fn write_json(
     inventory: &ForestInventory,

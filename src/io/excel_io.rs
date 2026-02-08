@@ -105,6 +105,17 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
     Ok(inventory)
 }
 
+/// Read forest inventory data from Excel bytes.
+pub fn read_excel_from_bytes(data: &[u8], name: &str) -> Result<ForestInventory, ForestError> {
+    use std::io::Write;
+    let mut tmp = tempfile::NamedTempFile::new()?;
+    tmp.write_all(data)?;
+    tmp.flush()?;
+    let mut inventory = read_excel(tmp.path())?;
+    inventory.name = name.to_string();
+    Ok(inventory)
+}
+
 /// Write forest inventory data to an Excel (.xlsx) file.
 pub fn write_excel(
     inventory: &ForestInventory,

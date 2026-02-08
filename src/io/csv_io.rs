@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::Path;
 
 use crate::error::ForestError;
@@ -23,15 +24,7 @@ struct TreeRow {
     elevation_ft: Option<f64>,
 }
 
-/// Read forest inventory data from a CSV file.
-pub fn read_csv(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> {
-    let path = path.as_ref();
-    let mut rdr = csv::ReaderBuilder::new()
-        .has_headers(true)
-        .flexible(true)
-        .trim(csv::Trim::All)
-        .from_path(path)?;
-
+fn parse_csv_records<R: Read>(rdr: &mut csv::Reader<R>) -> Result<std::collections::HashMap<u32, Plot>, ForestError> {
     let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
 
     for result in rdr.deserialize() {
@@ -68,11 +61,43 @@ pub fn read_csv(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> 
         plot.trees.push(tree);
     }
 
+    Ok(plots)
+}
+
+/// Read forest inventory data from a CSV file.
+pub fn read_csv(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> {
+    let path = path.as_ref();
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_path(path)?;
+
+    let plots = parse_csv_records(&mut rdr)?;
+
     let mut inventory = ForestInventory::new(
         path.file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "Unknown".to_string()),
     );
+    let mut plot_list: Vec<Plot> = plots.into_values().collect();
+    plot_list.sort_by_key(|p| p.plot_id);
+    inventory.plots = plot_list;
+
+    Ok(inventory)
+}
+
+/// Read forest inventory data from CSV bytes.
+pub fn read_csv_from_bytes(data: &[u8], name: &str) -> Result<ForestInventory, ForestError> {
+    let mut rdr = csv::ReaderBuilder::new()
+        .has_headers(true)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_reader(data);
+
+    let plots = parse_csv_records(&mut rdr)?;
+
+    let mut inventory = ForestInventory::new(name);
     let mut plot_list: Vec<Plot> = plots.into_values().collect();
     plot_list.sort_by_key(|p| p.plot_id);
     inventory.plots = plot_list;

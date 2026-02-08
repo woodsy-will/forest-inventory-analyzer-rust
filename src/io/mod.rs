@@ -7,9 +7,9 @@ use std::path::Path;
 use crate::error::ForestError;
 use crate::models::ForestInventory;
 
-pub use csv_io::{read_csv, write_csv};
-pub use json_io::{read_json, write_json};
-pub use excel_io::{read_excel, write_excel};
+pub use csv_io::{read_csv, read_csv_from_bytes, write_csv};
+pub use json_io::{read_json, read_json_from_bytes, write_json};
+pub use excel_io::{read_excel, read_excel_from_bytes, write_excel};
 
 /// Trait for reading forest inventory data from a file.
 pub trait InventoryReader {

@@ -101,6 +101,14 @@ enum Commands {
         #[arg(short, long)]
         input: PathBuf,
     },
+
+    /// Start the web UI server
+    #[cfg(feature = "web")]
+    Serve {
+        /// Port to listen on
+        #[arg(short, long, default_value = "8080")]
+        port: u16,
+    },
 }
 
 fn load_inventory(path: &PathBuf) -> Result<forest_inventory_analyzer::models::ForestInventory> {
@@ -251,6 +259,12 @@ fn main() -> Result<()> {
                 "  Mean Vol/ac:    {:.0} bd ft",
                 inventory.mean_volume_bdft()
             );
+        }
+
+        #[cfg(feature = "web")]
+        Commands::Serve { port } => {
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(forest_inventory_analyzer::web::start_server(port))?;
         }
     }
 

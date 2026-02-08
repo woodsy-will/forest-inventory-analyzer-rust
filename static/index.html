@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Forest Inventory Analyzer</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header>
+        <h1>Forest Inventory Analyzer</h1>
+        <p class="subtitle">Upload inventory data to explore stand metrics, species composition, and growth projections</p>
+    </header>
+
+    <main>
+        <!-- Upload Section -->
+        <section id="upload-section">
+            <div id="drop-zone" class="drop-zone">
+                <div class="drop-zone-content">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#2d5016" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                        <polyline points="17 8 12 3 7 8"/>
+                        <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                    <p>Drag & drop a file here, or click to select</p>
+                    <p class="hint">Supports CSV, JSON, and Excel (.xlsx)</p>
+                </div>
+                <input type="file" id="file-input" accept=".csv,.json,.xlsx,.xls" hidden>
+            </div>
+            <div id="upload-error" class="error-message" hidden></div>
+        </section>
+
+        <!-- Dashboard (hidden until upload) -->
+        <section id="dashboard" hidden>
+            <!-- Summary Bar -->
+            <div class="summary-bar">
+                <div class="summary-info">
+                    <span id="inv-name" class="inv-name"></span>
+                    <span class="summary-stat"><strong id="stat-plots">0</strong> plots</span>
+                    <span class="summary-stat"><strong id="stat-trees">0</strong> trees</span>
+                    <span class="summary-stat"><strong id="stat-species">0</strong> species</span>
+                </div>
+                <div class="export-buttons">
+                    <button onclick="exportData('csv')">Export CSV</button>
+                    <button onclick="exportData('json')">Export JSON</button>
+                </div>
+            </div>
+
+            <!-- Metric Cards -->
+            <div class="metric-cards">
+                <div class="metric-card">
+                    <div class="metric-label">Trees per Acre</div>
+                    <div class="metric-value" id="metric-tpa">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Basal Area (ft&sup2;/ac)</div>
+                    <div class="metric-value" id="metric-ba">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Volume (ft&sup3;/ac)</div>
+                    <div class="metric-value" id="metric-vol-cuft">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">Volume (bd ft/ac)</div>
+                    <div class="metric-value" id="metric-vol-bdft">--</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-label">QMD (in)</div>
+                    <div class="metric-value" id="metric-qmd">--</div>
+                </div>
+            </div>
+
+            <!-- Chart Row -->
+            <div class="chart-row">
+                <div class="chart-container">
+                    <h3>Species Composition</h3>
+                    <canvas id="species-chart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <h3>Diameter Distribution</h3>
+                    <canvas id="diameter-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Statistics Table -->
+            <div class="stats-section">
+                <h3>Sampling Statistics</h3>
+                <div id="stats-error" class="error-message" hidden></div>
+                <table id="stats-table">
+                    <thead>
+                        <tr>
+                            <th>Metric</th>
+                            <th>Mean</th>
+                            <th>Std Error</th>
+                            <th>Lower CI</th>
+                            <th>Upper CI</th>
+                            <th>Error %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stats-body"></tbody>
+                </table>
+            </div>
+
+            <!-- Growth Projection -->
+            <div class="growth-section">
+                <h3>Growth Projection</h3>
+                <div class="growth-controls">
+                    <label>
+                        Model:
+                        <select id="growth-model">
+                            <option value="Logistic">Logistic</option>
+                            <option value="Exponential">Exponential</option>
+                            <option value="Linear">Linear</option>
+                        </select>
+                    </label>
+                    <label>
+                        Years:
+                        <input type="number" id="growth-years" value="20" min="1" max="100">
+                    </label>
+                    <label>
+                        Growth Rate:
+                        <input type="number" id="growth-rate" value="0.03" step="0.005" min="0">
+                    </label>
+                    <label>
+                        Carrying Capacity:
+                        <input type="number" id="growth-capacity" value="300" step="10" min="1">
+                    </label>
+                    <label>
+                        Mortality Rate:
+                        <input type="number" id="growth-mortality" value="0.005" step="0.001" min="0">
+                    </label>
+                    <button id="growth-run" onclick="runGrowth()">Project Growth</button>
+                </div>
+                <div class="chart-container chart-wide">
+                    <canvas id="growth-chart"></canvas>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

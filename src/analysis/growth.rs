@@ -113,3 +113,215 @@ pub fn project_growth(
 
     Ok(projections)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{Plot, Species, Tree, TreeStatus};
+
+    fn make_tree(plot_id: u32, dbh: f64) -> Tree {
+        Tree {
+            tree_id: 1,
+            plot_id,
+            species: Species {
+                common_name: "Douglas Fir".to_string(),
+                code: "DF".to_string(),
+            },
+            dbh,
+            height: Some(100.0),
+            crown_ratio: Some(0.5),
+            status: TreeStatus::Live,
+            expansion_factor: 5.0,
+            age: None,
+            defect: None,
+        }
+    }
+
+    fn make_plot(plot_id: u32, trees: Vec<Tree>) -> Plot {
+        Plot {
+            plot_id,
+            plot_size_acres: 0.2,
+            slope_percent: None,
+            aspect_degrees: None,
+            elevation_ft: None,
+            trees,
+        }
+    }
+
+    fn sample_inventory() -> ForestInventory {
+        let mut inv = ForestInventory::new("Growth Test");
+        inv.plots.push(make_plot(1, vec![make_tree(1, 14.0), make_tree(1, 16.0)]));
+        inv.plots.push(make_plot(2, vec![make_tree(2, 12.0), make_tree(2, 18.0)]));
+        inv
+    }
+
+    #[test]
+    fn test_empty_inventory_error() {
+        let inv = ForestInventory::new("Empty");
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_year_zero_matches_current() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 5).unwrap();
+        assert_eq!(proj[0].year, 0);
+        assert!((proj[0].tpa - inv.mean_tpa()).abs() < 0.001);
+        assert!((proj[0].basal_area - inv.mean_basal_area()).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_projection_length() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 20).unwrap();
+        assert_eq!(proj.len(), 21);
+        assert_eq!(proj.first().unwrap().year, 0);
+        assert_eq!(proj.last().unwrap().year, 20);
+    }
+
+    #[test]
+    fn test_zero_years() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 0).unwrap();
+        assert_eq!(proj.len(), 1);
+        assert_eq!(proj[0].year, 0);
+    }
+
+    #[test]
+    fn test_exponential_growth_increases_volume() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 10).unwrap();
+        assert!(proj[10].basal_area > proj[0].basal_area);
+        assert!(proj[10].volume_cuft > proj[0].volume_cuft);
+        assert!(proj[10].volume_bdft > proj[0].volume_bdft);
+    }
+
+    #[test]
+    fn test_exponential_tpa_decreases_mortality() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 10).unwrap();
+        assert!(proj[10].tpa < proj[0].tpa);
+    }
+
+    #[test]
+    fn test_exponential_monotonic_volume_increase() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential { annual_rate: 0.03 };
+        let proj = project_growth(&inv, &model, 20).unwrap();
+        for i in 1..proj.len() {
+            assert!(proj[i].basal_area >= proj[i - 1].basal_area);
+        }
+    }
+
+    #[test]
+    fn test_logistic_growth_bounded() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Logistic {
+            annual_rate: 0.03,
+            carrying_capacity: 300.0,
+        };
+        let proj = project_growth(&inv, &model, 100).unwrap();
+        assert!(proj.last().unwrap().basal_area <= 300.0 + 0.1);
+    }
+
+    #[test]
+    fn test_logistic_growth_increases() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Logistic {
+            annual_rate: 0.03,
+            carrying_capacity: 300.0,
+        };
+        let proj = project_growth(&inv, &model, 10).unwrap();
+        assert!(proj[10].basal_area >= proj[0].basal_area);
+    }
+
+    #[test]
+    fn test_logistic_tpa_decreases() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Logistic {
+            annual_rate: 0.03,
+            carrying_capacity: 300.0,
+        };
+        let proj = project_growth(&inv, &model, 10).unwrap();
+        assert!(proj[10].tpa < proj[0].tpa);
+    }
+
+    #[test]
+    fn test_linear_growth() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Linear { annual_increment: 2.0 };
+        let proj = project_growth(&inv, &model, 10).unwrap();
+        let expected_ba = proj[0].basal_area + 2.0 * 10.0;
+        assert!((proj[10].basal_area - expected_ba).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_linear_tpa_decreases_to_floor() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Linear { annual_increment: 1.0 };
+        let proj = project_growth(&inv, &model, 200).unwrap();
+        assert!(proj.last().unwrap().tpa >= 0.0);
+    }
+
+    #[test]
+    fn test_linear_volume_increase() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Linear { annual_increment: 2.0 };
+        let proj = project_growth(&inv, &model, 5).unwrap();
+        let expected_vol = proj[0].volume_cuft + 2.0 * 5.0 * 10.0;
+        assert!((proj[5].volume_cuft - expected_vol).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_all_projections_non_negative() {
+        let inv = sample_inventory();
+        let models: Vec<GrowthModel> = vec![
+            GrowthModel::Exponential { annual_rate: 0.03 },
+            GrowthModel::Logistic { annual_rate: 0.03, carrying_capacity: 300.0 },
+            GrowthModel::Linear { annual_increment: 1.0 },
+        ];
+        for model in &models {
+            let proj = project_growth(&inv, model, 50).unwrap();
+            for p in &proj {
+                assert!(p.tpa >= 0.0, "TPA negative at year {}", p.year);
+                assert!(p.basal_area >= 0.0, "BA negative at year {}", p.year);
+                assert!(p.volume_cuft >= 0.0, "Vol cuft negative at year {}", p.year);
+                assert!(p.volume_bdft >= 0.0, "Vol bdft negative at year {}", p.year);
+            }
+        }
+    }
+
+    #[test]
+    fn test_growth_model_json_roundtrip() {
+        let models = vec![
+            GrowthModel::Exponential { annual_rate: 0.03 },
+            GrowthModel::Logistic { annual_rate: 0.05, carrying_capacity: 250.0 },
+            GrowthModel::Linear { annual_increment: 1.5 },
+        ];
+        for model in &models {
+            let json = serde_json::to_string(model).unwrap();
+            let _deserialized: GrowthModel = serde_json::from_str(&json).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_growth_projection_json_roundtrip() {
+        let proj = GrowthProjection {
+            year: 5,
+            tpa: 100.0,
+            basal_area: 150.0,
+            volume_cuft: 2000.0,
+            volume_bdft: 10000.0,
+        };
+        let json = serde_json::to_string(&proj).unwrap();
+        let deserialized: GrowthProjection = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.year, 5);
+        assert!((deserialized.tpa - 100.0).abs() < 0.001);
+    }
+}

@@ -120,3 +120,276 @@ impl Tree {
         self.status == TreeStatus::Live
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_tree(dbh: f64, height: Option<f64>, status: TreeStatus, ef: f64) -> Tree {
+        Tree {
+            tree_id: 1,
+            plot_id: 1,
+            species: Species {
+                common_name: "Douglas Fir".to_string(),
+                code: "DF".to_string(),
+            },
+            dbh,
+            height,
+            crown_ratio: Some(0.5),
+            status,
+            expansion_factor: ef,
+            age: Some(60),
+            defect: None,
+        }
+    }
+
+    // --- TreeStatus tests ---
+
+    #[test]
+    fn test_tree_status_display() {
+        assert_eq!(TreeStatus::Live.to_string(), "Live");
+        assert_eq!(TreeStatus::Dead.to_string(), "Dead");
+        assert_eq!(TreeStatus::Cut.to_string(), "Cut");
+        assert_eq!(TreeStatus::Missing.to_string(), "Missing");
+    }
+
+    #[test]
+    fn test_tree_status_parse_full_words() {
+        assert_eq!("live".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
+        assert_eq!("dead".parse::<TreeStatus>().unwrap(), TreeStatus::Dead);
+        assert_eq!("cut".parse::<TreeStatus>().unwrap(), TreeStatus::Cut);
+        assert_eq!("missing".parse::<TreeStatus>().unwrap(), TreeStatus::Missing);
+    }
+
+    #[test]
+    fn test_tree_status_parse_abbreviations() {
+        assert_eq!("l".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
+        assert_eq!("d".parse::<TreeStatus>().unwrap(), TreeStatus::Dead);
+        assert_eq!("c".parse::<TreeStatus>().unwrap(), TreeStatus::Cut);
+        assert_eq!("m".parse::<TreeStatus>().unwrap(), TreeStatus::Missing);
+    }
+
+    #[test]
+    fn test_tree_status_parse_case_insensitive() {
+        assert_eq!("LIVE".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
+        assert_eq!("Live".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
+        assert_eq!("L".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
+        assert_eq!("DEAD".parse::<TreeStatus>().unwrap(), TreeStatus::Dead);
+    }
+
+    #[test]
+    fn test_tree_status_parse_invalid() {
+        assert!("unknown".parse::<TreeStatus>().is_err());
+        assert!("alive".parse::<TreeStatus>().is_err());
+        assert!("".parse::<TreeStatus>().is_err());
+        assert!("x".parse::<TreeStatus>().is_err());
+    }
+
+    // --- Species tests ---
+
+    #[test]
+    fn test_species_display() {
+        let sp = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        assert_eq!(sp.to_string(), "Douglas Fir (DF)");
+    }
+
+    #[test]
+    fn test_species_equality() {
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        assert_eq!(sp1, sp2);
+    }
+
+    #[test]
+    fn test_species_inequality() {
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Western Red Cedar".to_string(),
+            code: "WRC".to_string(),
+        };
+        assert_ne!(sp1, sp2);
+    }
+
+    #[test]
+    fn test_species_hash_consistency() {
+        use std::collections::HashSet;
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = sp1.clone();
+        let mut set = HashSet::new();
+        set.insert(sp1);
+        set.insert(sp2);
+        assert_eq!(set.len(), 1);
+    }
+
+    // --- Basal area tests ---
+
+    #[test]
+    fn test_basal_area_12_inch_tree() {
+        let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        let ba = tree.basal_area_sqft();
+        // BA = pi * (12/2)^2 / 144 = pi * 36 / 144 = 0.7854
+        assert!((ba - 0.7854).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_basal_area_zero_dbh() {
+        let tree = make_tree(0.0, Some(80.0), TreeStatus::Live, 5.0);
+        assert_eq!(tree.basal_area_sqft(), 0.0);
+    }
+
+    #[test]
+    fn test_basal_area_per_acre() {
+        let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        let ba = tree.basal_area_sqft();
+        let ba_per_acre = tree.basal_area_per_acre();
+        assert!((ba_per_acre - ba * 5.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn test_basal_area_large_tree() {
+        let tree = make_tree(36.0, Some(150.0), TreeStatus::Live, 3.0);
+        let ba = tree.basal_area_sqft();
+        // BA = pi * (36/2)^2 / 144 = pi * 324 / 144 = 7.069
+        assert!((ba - 7.069).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_basal_area_small_tree() {
+        let tree = make_tree(1.0, Some(15.0), TreeStatus::Live, 20.0);
+        let ba = tree.basal_area_sqft();
+        // BA = pi * (0.5)^2 / 144 = pi * 0.25 / 144 ≈ 0.00545
+        assert!((ba - 0.00545).abs() < 0.001);
+    }
+
+    // --- Volume tests ---
+
+    #[test]
+    fn test_volume_cuft_normal_tree() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let vol = tree.volume_cuft().unwrap();
+        // V = 0.002454 * 16^2 * 100 = 0.002454 * 256 * 100 = 62.82
+        assert!((vol - 62.82).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_cuft_no_height() {
+        let tree = make_tree(16.0, None, TreeStatus::Live, 5.0);
+        assert!(tree.volume_cuft().is_none());
+    }
+
+    #[test]
+    fn test_volume_cuft_zero_dbh() {
+        let tree = make_tree(0.0, Some(100.0), TreeStatus::Live, 5.0);
+        assert_eq!(tree.volume_cuft().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_volume_cuft_zero_height() {
+        let tree = make_tree(16.0, Some(0.0), TreeStatus::Live, 5.0);
+        assert_eq!(tree.volume_cuft().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_volume_cuft_with_defect() {
+        let mut tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        tree.defect = Some(0.10); // 10% defect
+        let vol = tree.volume_cuft().unwrap();
+        let gross = 0.002454 * 256.0 * 100.0;
+        let expected = gross * 0.90;
+        assert!((vol - expected).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_bdft_normal_tree() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let vol = tree.volume_bdft().unwrap();
+        assert!(vol > 0.0);
+    }
+
+    #[test]
+    fn test_volume_bdft_small_tree_below_merchantable() {
+        // Trees < 6" DBH should return 0 board feet
+        let tree = make_tree(5.0, Some(50.0), TreeStatus::Live, 10.0);
+        assert_eq!(tree.volume_bdft().unwrap(), 0.0);
+    }
+
+    #[test]
+    fn test_volume_bdft_no_height() {
+        let tree = make_tree(16.0, None, TreeStatus::Live, 5.0);
+        assert!(tree.volume_bdft().is_none());
+    }
+
+    #[test]
+    fn test_volume_bdft_with_defect() {
+        let mut tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let vol_no_defect = tree.volume_bdft().unwrap();
+        tree.defect = Some(0.20);
+        let vol_with_defect = tree.volume_bdft().unwrap();
+        assert!((vol_with_defect - vol_no_defect * 0.80).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_bdft_negative_clamped_to_zero() {
+        // Very small merchantable tree where equation might go negative
+        let tree = make_tree(6.0, Some(1.0), TreeStatus::Live, 5.0);
+        let vol = tree.volume_bdft().unwrap();
+        assert!(vol >= 0.0);
+    }
+
+    // --- is_live tests ---
+
+    #[test]
+    fn test_is_live() {
+        assert!(make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0).is_live());
+        assert!(!make_tree(12.0, Some(80.0), TreeStatus::Dead, 5.0).is_live());
+        assert!(!make_tree(12.0, Some(80.0), TreeStatus::Cut, 5.0).is_live());
+        assert!(!make_tree(12.0, Some(80.0), TreeStatus::Missing, 5.0).is_live());
+    }
+
+    // --- Serialization roundtrip ---
+
+    #[test]
+    fn test_tree_json_roundtrip() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let json = serde_json::to_string(&tree).unwrap();
+        let deserialized: Tree = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tree_id, tree.tree_id);
+        assert_eq!(deserialized.dbh, tree.dbh);
+        assert_eq!(deserialized.status, tree.status);
+    }
+
+    #[test]
+    fn test_tree_status_json_roundtrip() {
+        for status in &[TreeStatus::Live, TreeStatus::Dead, TreeStatus::Cut, TreeStatus::Missing] {
+            let json = serde_json::to_string(status).unwrap();
+            let deserialized: TreeStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(&deserialized, status);
+        }
+    }
+
+    #[test]
+    fn test_species_json_roundtrip() {
+        let sp = Species {
+            common_name: "Western Hemlock".to_string(),
+            code: "WH".to_string(),
+        };
+        let json = serde_json::to_string(&sp).unwrap();
+        let deserialized: Species = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized, sp);
+    }
+}

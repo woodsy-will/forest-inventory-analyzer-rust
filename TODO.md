@@ -26,10 +26,42 @@
 
 - [x] **Add CLI integration tests** — No tests for `main.rs` CLI argument parsing or subcommand dispatch. Use `assert_cmd` or similar crate to test that the binary handles valid/invalid inputs correctly.
 
-## Priority 4: Documentation & Polish
+## Priority 4: Web UI & Validation
 
-- [ ] **Add architecture documentation** — Create a `docs/architecture.md` explaining the 4-layer design (domain, data access, business logic, presentation), data flow, and module responsibilities.
+- [x] **Lenient validation with in-browser data editor** — Upload collects all validation errors instead of failing on the first. Returns editable rows so users can fix values in-browser and resubmit via `/api/validate`.
+
+- [x] **Security hardening** — XSS prevention (DOM APIs instead of innerHTML), Content-Disposition header sanitization, UUID provenance checks on `/api/validate`, TTL-based memory eviction for pending_rows/inventories, explicit upload size limits (50 MB).
+
+### Architecture Review Notes (from code review)
+
+**Remaining medium-priority issues:**
+
+- [ ] **Unify `validate` and `validate_all`** — Both methods in `tree.rs` duplicate the same 5 checks. Implement `validate_all` as canonical, then have `validate()` call it and return the first issue as `Err`. Prevents drift when adding new constraints.
+
+- [ ] **Move `rows_to_inventory` to `io` module** — This helper in `handlers.rs` is effectively a fourth parser. It belongs in `io/` alongside the other data transformation functions to keep the web layer thin.
+
+- [ ] **Consistent strict parsing for status** — `csv_io::parse_csv_records` rejects unknown status as a fatal error, but `excel_io::read_excel` silently defaults to Live with a `log::warn!`. Both strict parsers should behave the same way.
+
+- [ ] **Add `NotFound` variant to `ForestError`** — Inventory-not-found currently uses `ForestError::ParseError`, which maps to HTTP 400. Should be a dedicated variant mapping to HTTP 404.
+
+- [ ] **Handle Mutex poisoning gracefully** — `state.rs` methods use `.unwrap()` on `Mutex::lock()`. Replace with `.expect()` or propagate the error to prevent panic cascades if a thread panics while holding a lock.
+
+- [ ] **Generate `ValidationIssue` for skipped Excel rows** — Both `read_excel` and `parse_excel_lenient` silently skip rows with <9 columns. The lenient parser should record these as issues instead of dropping data.
+
+- [ ] **Use `Path` for filename parsing in upload handler** — `rsplit('.')` gives wrong stem for multi-dot filenames like `my.data.csv`. Use `Path::new(&filename).file_stem()` / `.extension()`.
+
+**Lower-priority / nice-to-have:**
+
+- [ ] **Error editor UX improvements** — Add loading spinner on "Validate & Save", confirmation dialog on "Start Over", click-to-jump on error badges, and table `<caption>` + `aria-label` on inputs for accessibility.
+
+- [ ] **Mobile responsiveness for editor table** — The 12-column edit table is unusable on narrow screens. Consider column hiding or a card-based layout on mobile.
+
+## Priority 5: Documentation & Polish
+
+- [ ] **Add architecture documentation** — Create a `docs/architecture.md` explaining the 5-layer design (domain, data access, business logic, web, presentation), data flow, and module responsibilities.
 
 - [ ] **Add library usage examples** — Add `examples/` directory with runnable examples showing programmatic use of the library (loading data, running analysis, accessing results).
 
 - [ ] **Add CI/CD pipeline** — Set up GitHub Actions workflow for `cargo test`, `cargo clippy`, and `cargo fmt --check` on push/PR to master.
+
+- [ ] **Database-backed persistence** — The in-memory `HashMap` storage for inventories won't scale for concurrent users or server restarts. Consider SQLite or similar for persistence.

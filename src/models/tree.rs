@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::volume::VolumeEquation;
+
 /// Status of a tree in the inventory.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TreeStatus {
@@ -90,27 +92,32 @@ impl Tree {
     /// Estimate cubic foot volume using the combined variable equation.
     /// Uses a simplified form of the National Volume Estimator approach.
     pub fn volume_cuft(&self) -> Option<f64> {
+        self.volume_cuft_with(&VolumeEquation::default())
+    }
+
+    /// Estimate cubic foot volume using custom equation coefficients.
+    pub fn volume_cuft_with(&self, eq: &VolumeEquation) -> Option<f64> {
         let height = self.height?;
         if self.dbh <= 0.0 || height <= 0.0 {
             return Some(0.0);
         }
-        // Simplified combined variable equation: V = b1 * DBH^2 * H
-        // Using a general coefficient; species-specific coefficients would improve accuracy
-        let b1 = 0.002454;
-        let gross_volume = b1 * self.dbh.powi(2) * height;
+        let gross_volume = eq.cuft_b1 * self.dbh.powi(2) * height;
         let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
         Some(gross_volume * defect_factor)
     }
 
     /// Estimate board foot volume (Scribner) using a simplified equation.
     pub fn volume_bdft(&self) -> Option<f64> {
+        self.volume_bdft_with(&VolumeEquation::default())
+    }
+
+    /// Estimate board foot volume using custom equation coefficients.
+    pub fn volume_bdft_with(&self, eq: &VolumeEquation) -> Option<f64> {
         let height = self.height?;
-        if self.dbh < 6.0 || height <= 0.0 {
+        if self.dbh < eq.bdft_min_dbh || height <= 0.0 {
             return Some(0.0);
         }
-        // Simplified Scribner board foot volume
-        let b1 = 0.01159;
-        let gross_volume = b1 * self.dbh.powi(2) * height - 4.0 * self.dbh;
+        let gross_volume = eq.bdft_b1 * self.dbh.powi(2) * height - eq.bdft_b2 * self.dbh;
         let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
         Some(gross_volume.max(0.0) * defect_factor)
     }
@@ -540,5 +547,60 @@ mod tests {
         assert!(tree.validate().is_ok());
         tree.defect = Some(1.0);
         assert!(tree.validate().is_ok());
+    }
+
+    // --- volume_cuft_with / volume_bdft_with tests ---
+
+    #[test]
+    fn test_volume_cuft_with_default_matches_original() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let default_eq = super::VolumeEquation::default();
+        assert_eq!(tree.volume_cuft(), tree.volume_cuft_with(&default_eq));
+    }
+
+    #[test]
+    fn test_volume_bdft_with_default_matches_original() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let default_eq = super::VolumeEquation::default();
+        assert_eq!(tree.volume_bdft(), tree.volume_bdft_with(&default_eq));
+    }
+
+    #[test]
+    fn test_volume_cuft_with_custom_coefficients() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let eq = super::VolumeEquation {
+            cuft_b1: 0.003,
+            ..super::VolumeEquation::default()
+        };
+        let vol = tree.volume_cuft_with(&eq).unwrap();
+        // V = 0.003 * 16^2 * 100 = 76.8
+        assert!((vol - 76.8).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_bdft_with_custom_coefficients() {
+        let tree = make_tree(16.0, Some(100.0), TreeStatus::Live, 5.0);
+        let eq = super::VolumeEquation {
+            bdft_b1: 0.015,
+            bdft_b2: 5.0,
+            bdft_min_dbh: 6.0,
+            ..super::VolumeEquation::default()
+        };
+        let vol = tree.volume_bdft_with(&eq).unwrap();
+        // V = 0.015 * 256 * 100 - 5.0 * 16 = 384 - 80 = 304
+        assert!((vol - 304.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_bdft_with_custom_min_dbh() {
+        let tree = make_tree(8.0, Some(60.0), TreeStatus::Live, 5.0);
+        // Default min_dbh=6.0 should give volume
+        assert!(tree.volume_bdft().unwrap() > 0.0);
+        // Custom min_dbh=10.0 should give 0 for an 8" tree
+        let eq = super::VolumeEquation {
+            bdft_min_dbh: 10.0,
+            ..super::VolumeEquation::default()
+        };
+        assert_eq!(tree.volume_bdft_with(&eq).unwrap(), 0.0);
     }
 }

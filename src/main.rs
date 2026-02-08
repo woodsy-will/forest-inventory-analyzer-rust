@@ -74,6 +74,10 @@ enum Commands {
         /// Carrying capacity for basal area (logistic model, sq ft/acre)
         #[arg(short, long, default_value = "300.0")]
         capacity: f64,
+
+        /// Annual mortality rate (proportion for exponential/logistic, TPA/year for linear)
+        #[arg(long)]
+        mortality: Option<f64>,
     },
 
     /// Convert inventory data between formats
@@ -166,17 +170,23 @@ fn main() -> Result<()> {
             model,
             rate,
             capacity,
+            mortality,
         } => {
             let inventory = load_inventory(&input)?;
 
             let growth_model = match model.to_lowercase().as_str() {
-                "exponential" | "exp" => GrowthModel::Exponential { annual_rate: rate },
+                "exponential" | "exp" => GrowthModel::Exponential {
+                    annual_rate: rate,
+                    mortality_rate: mortality.unwrap_or(0.005),
+                },
                 "logistic" | "log" => GrowthModel::Logistic {
                     annual_rate: rate,
                     carrying_capacity: capacity,
+                    mortality_rate: mortality.unwrap_or(0.005),
                 },
                 "linear" | "lin" => GrowthModel::Linear {
                     annual_increment: rate,
+                    mortality_rate: mortality.unwrap_or(0.5),
                 },
                 _ => anyhow::bail!(
                     "Unknown growth model: {model}. Use: exponential, logistic, or linear"

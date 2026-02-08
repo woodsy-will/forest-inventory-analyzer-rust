@@ -10,11 +10,11 @@
 
 ## Priority 2: Structural Improvements
 
-- [ ] **Extract volume equations into configurable structs** — The hardcoded coefficients `b1 = 0.002454` (cubic foot) and `b1 = 0.01159` (board foot Scribner) in `tree.rs` are general-purpose approximations. Define a `VolumeEquation` trait or struct that allows species-specific coefficients to be injected, improving accuracy for real-world use.
+- [x] **Extract volume equations into configurable structs** — The hardcoded coefficients `b1 = 0.002454` (cubic foot) and `b1 = 0.01159` (board foot Scribner) in `tree.rs` are general-purpose approximations. Define a `VolumeEquation` trait or struct that allows species-specific coefficients to be injected, improving accuracy for real-world use.
 
-- [ ] **Make mortality rate configurable in growth models** — The hardcoded `0.005` (0.5% annual) mortality rate in `growth.rs` is embedded in all three model variants. Add a `mortality_rate` field to `GrowthModel::Exponential`, `GrowthModel::Logistic`, and `GrowthModel::Linear` so users can adjust mortality assumptions.
+- [x] **Make mortality rate configurable in growth models** — The hardcoded `0.005` (0.5% annual) mortality rate in `growth.rs` is embedded in all three model variants. Add a `mortality_rate` field to `GrowthModel::Exponential`, `GrowthModel::Logistic`, and `GrowthModel::Linear` so users can adjust mortality assumptions.
 
-- [ ] **Add convenience re-exports to lib.rs** — Add `pub use models::{Tree, Plot, ForestInventory, Species, TreeStatus};` to `lib.rs` so library consumers can use `forest_inventory_analyzer::Tree` instead of `forest_inventory_analyzer::models::Tree`.
+- [x] **Add convenience re-exports to lib.rs** — Add `pub use models::{Tree, Plot, ForestInventory, Species, TreeStatus};` to `lib.rs` so library consumers can use `forest_inventory_analyzer::Tree` instead of `forest_inventory_analyzer::models::Tree`.
 
 ## Priority 3: Extensibility & Future-Proofing
 

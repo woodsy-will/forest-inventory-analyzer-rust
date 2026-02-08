@@ -280,6 +280,7 @@ fn test_growth_projection() {
     let model = GrowthModel::Logistic {
         annual_rate: 0.03,
         carrying_capacity: 300.0,
+        mortality_rate: 0.005,
     };
 
     let projections = project_growth(&inventory, &model, 10).unwrap();
@@ -297,9 +298,9 @@ fn test_growth_all_models() {
     let inventory = create_test_inventory();
 
     let models = vec![
-        ("exponential", GrowthModel::Exponential { annual_rate: 0.03 }),
-        ("logistic", GrowthModel::Logistic { annual_rate: 0.03, carrying_capacity: 300.0 }),
-        ("linear", GrowthModel::Linear { annual_increment: 2.0 }),
+        ("exponential", GrowthModel::Exponential { annual_rate: 0.03, mortality_rate: 0.005 }),
+        ("logistic", GrowthModel::Logistic { annual_rate: 0.03, carrying_capacity: 300.0, mortality_rate: 0.005 }),
+        ("linear", GrowthModel::Linear { annual_increment: 2.0, mortality_rate: 0.5 }),
     ];
 
     for (name, model) in &models {
@@ -320,7 +321,7 @@ fn test_growth_all_models() {
 #[test]
 fn test_growth_empty_inventory_error() {
     let empty = ForestInventory::new("Empty");
-    let model = GrowthModel::Exponential { annual_rate: 0.03 };
+    let model = GrowthModel::Exponential { annual_rate: 0.03, mortality_rate: 0.005 };
     assert!(project_growth(&empty, &model, 10).is_err());
 }
 
@@ -572,6 +573,7 @@ fn test_full_analysis_workflow() {
     let model = GrowthModel::Logistic {
         annual_rate: 0.03,
         carrying_capacity: 300.0,
+        mortality_rate: 0.005,
     };
     let proj = project_growth(&inventory, &model, 20).unwrap();
     assert_eq!(proj.len(), 21);
@@ -722,6 +724,7 @@ fn test_large_inventory() {
     let model = GrowthModel::Logistic {
         annual_rate: 0.03,
         carrying_capacity: 300.0,
+        mortality_rate: 0.005,
     };
     let proj = project_growth(&inventory, &model, 10).unwrap();
     assert_eq!(proj.len(), 11);

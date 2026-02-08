@@ -3,6 +3,7 @@ use forest_inventory_analyzer::{
         compute_stand_metrics, project_growth, DiameterDistribution, GrowthModel,
         SamplingStatistics,
     },
+    error::ForestError,
     io,
     models::{ForestInventory, Plot, Species, Tree, TreeStatus},
 };
@@ -724,4 +725,115 @@ fn test_large_inventory() {
     };
     let proj = project_growth(&inventory, &model, 10).unwrap();
     assert_eq!(proj.len(), 11);
+}
+
+// ============================================================================
+// Input validation integration tests
+// ============================================================================
+
+/// Helper to write a CSV with one tree row and attempt to read it back.
+fn write_and_read_csv(dbh: f64, height: &str, crown_ratio: &str, ef: f64, defect: &str) -> Result<ForestInventory, ForestError> {
+    let dir = tempfile::tempdir().unwrap();
+    let csv_path = dir.path().join("invalid.csv");
+    let height_val = if height.is_empty() { "".to_string() } else { height.to_string() };
+    let cr_val = if crown_ratio.is_empty() { "".to_string() } else { crown_ratio.to_string() };
+    let defect_val = if defect.is_empty() { "".to_string() } else { defect.to_string() };
+    let content = format!(
+        "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n\
+         1,1,DF,Douglas Fir,{},{},{},Live,{},60,{},0.2,15,180,3000",
+        dbh, height_val, cr_val, ef, defect_val
+    );
+    std::fs::write(&csv_path, content).unwrap();
+    io::read_csv(&csv_path)
+}
+
+#[test]
+fn test_csv_rejects_negative_dbh() {
+    let result = write_and_read_csv(-5.0, "80", "0.5", 5.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
+}
+
+#[test]
+fn test_csv_rejects_zero_dbh() {
+    let result = write_and_read_csv(0.0, "80", "0.5", 5.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
+}
+
+#[test]
+fn test_csv_rejects_negative_height() {
+    let result = write_and_read_csv(12.0, "-10", "0.5", 5.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("height must be positive"));
+}
+
+#[test]
+fn test_csv_rejects_crown_ratio_above_one() {
+    let result = write_and_read_csv(12.0, "80", "1.5", 5.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("crown_ratio must be in 0.0..=1.0"));
+}
+
+#[test]
+fn test_csv_rejects_negative_crown_ratio() {
+    let result = write_and_read_csv(12.0, "80", "-0.1", 5.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("crown_ratio must be in 0.0..=1.0"));
+}
+
+#[test]
+fn test_csv_rejects_zero_expansion_factor() {
+    let result = write_and_read_csv(12.0, "80", "0.5", 0.0, "");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("expansion_factor must be positive"));
+}
+
+#[test]
+fn test_csv_rejects_defect_above_one() {
+    let result = write_and_read_csv(12.0, "80", "0.5", 5.0, "1.5");
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("defect must be in 0.0..=1.0"));
+}
+
+#[test]
+fn test_csv_accepts_valid_data() {
+    let result = write_and_read_csv(12.0, "80", "0.5", 5.0, "0.1");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_json_rejects_invalid_data() {
+    // Create inventory with invalid tree, write to JSON, then read back
+    let mut inventory = ForestInventory::new("Invalid");
+    inventory.plots.push(Plot {
+        plot_id: 1,
+        plot_size_acres: 0.2,
+        slope_percent: None,
+        aspect_degrees: None,
+        elevation_ft: None,
+        trees: vec![Tree {
+            tree_id: 1,
+            plot_id: 1,
+            species: Species {
+                common_name: "Douglas Fir".to_string(),
+                code: "DF".to_string(),
+            },
+            dbh: -5.0, // invalid
+            height: Some(80.0),
+            crown_ratio: Some(0.5),
+            status: TreeStatus::Live,
+            expansion_factor: 5.0,
+            age: Some(60),
+            defect: None,
+        }],
+    });
+
+    let dir = tempfile::tempdir().unwrap();
+    let json_path = dir.path().join("invalid.json");
+    io::write_json(&inventory, &json_path, true).unwrap();
+
+    let result = io::read_json(&json_path);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
 }

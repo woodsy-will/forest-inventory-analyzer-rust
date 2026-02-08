@@ -54,6 +54,8 @@ pub fn read_csv(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> 
             defect: row.defect,
         };
 
+        tree.validate()?;
+
         let plot = plots.entry(row.plot_id).or_insert_with(|| Plot {
             plot_id: row.plot_id,
             plot_size_acres: row.plot_size_acres.unwrap_or(0.2),

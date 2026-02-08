@@ -119,6 +119,47 @@ impl Tree {
     pub fn is_live(&self) -> bool {
         self.status == TreeStatus::Live
     }
+
+    /// Validate tree measurements. Returns `ForestError::ValidationError` on failure.
+    pub fn validate(&self) -> Result<(), crate::error::ForestError> {
+        if self.dbh <= 0.0 {
+            return Err(crate::error::ForestError::ValidationError(format!(
+                "Plot {}, Tree {}: DBH must be positive, got {}",
+                self.plot_id, self.tree_id, self.dbh
+            )));
+        }
+        if let Some(h) = self.height {
+            if h <= 0.0 {
+                return Err(crate::error::ForestError::ValidationError(format!(
+                    "Plot {}, Tree {}: height must be positive, got {}",
+                    self.plot_id, self.tree_id, h
+                )));
+            }
+        }
+        if let Some(cr) = self.crown_ratio {
+            if !(0.0..=1.0).contains(&cr) {
+                return Err(crate::error::ForestError::ValidationError(format!(
+                    "Plot {}, Tree {}: crown_ratio must be in 0.0..=1.0, got {}",
+                    self.plot_id, self.tree_id, cr
+                )));
+            }
+        }
+        if self.expansion_factor <= 0.0 {
+            return Err(crate::error::ForestError::ValidationError(format!(
+                "Plot {}, Tree {}: expansion_factor must be positive, got {}",
+                self.plot_id, self.tree_id, self.expansion_factor
+            )));
+        }
+        if let Some(d) = self.defect {
+            if !(0.0..=1.0).contains(&d) {
+                return Err(crate::error::ForestError::ValidationError(format!(
+                    "Plot {}, Tree {}: defect must be in 0.0..=1.0, got {}",
+                    self.plot_id, self.tree_id, d
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -391,5 +432,113 @@ mod tests {
         let json = serde_json::to_string(&sp).unwrap();
         let deserialized: Species = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized, sp);
+    }
+
+    // --- Validation tests ---
+
+    #[test]
+    fn test_validate_valid_tree() {
+        let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        assert!(tree.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_valid_tree_no_optionals() {
+        let mut tree = make_tree(12.0, None, TreeStatus::Live, 5.0);
+        tree.crown_ratio = None;
+        tree.defect = None;
+        assert!(tree.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_zero_dbh() {
+        let tree = make_tree(0.0, Some(80.0), TreeStatus::Live, 5.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("DBH must be positive"));
+    }
+
+    #[test]
+    fn test_validate_negative_dbh() {
+        let tree = make_tree(-1.0, Some(80.0), TreeStatus::Live, 5.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("DBH must be positive"));
+    }
+
+    #[test]
+    fn test_validate_zero_height() {
+        let tree = make_tree(12.0, Some(0.0), TreeStatus::Live, 5.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("height must be positive"));
+    }
+
+    #[test]
+    fn test_validate_negative_height() {
+        let tree = make_tree(12.0, Some(-5.0), TreeStatus::Live, 5.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("height must be positive"));
+    }
+
+    #[test]
+    fn test_validate_crown_ratio_above_one() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.crown_ratio = Some(1.5);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("crown_ratio must be in 0.0..=1.0"));
+    }
+
+    #[test]
+    fn test_validate_crown_ratio_negative() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.crown_ratio = Some(-0.1);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("crown_ratio must be in 0.0..=1.0"));
+    }
+
+    #[test]
+    fn test_validate_crown_ratio_boundary_values() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.crown_ratio = Some(0.0);
+        assert!(tree.validate().is_ok());
+        tree.crown_ratio = Some(1.0);
+        assert!(tree.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_zero_expansion_factor() {
+        let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 0.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("expansion_factor must be positive"));
+    }
+
+    #[test]
+    fn test_validate_negative_expansion_factor() {
+        let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, -1.0);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("expansion_factor must be positive"));
+    }
+
+    #[test]
+    fn test_validate_defect_above_one() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.defect = Some(1.1);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("defect must be in 0.0..=1.0"));
+    }
+
+    #[test]
+    fn test_validate_defect_negative() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.defect = Some(-0.05);
+        let err = tree.validate().unwrap_err();
+        assert!(err.to_string().contains("defect must be in 0.0..=1.0"));
+    }
+
+    #[test]
+    fn test_validate_defect_boundary_values() {
+        let mut tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 5.0);
+        tree.defect = Some(0.0);
+        assert!(tree.validate().is_ok());
+        tree.defect = Some(1.0);
+        assert!(tree.validate().is_ok());
     }
 }

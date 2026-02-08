@@ -2,11 +2,11 @@
 
 ## Priority 1: Quick Wins
 
-- [ ] **Add input validation on data load** — Validate DBH > 0, 0 <= crown_ratio <= 1.0, height > 0 when present, expansion_factor > 0. Use the existing `ValidationError` variant which is currently defined but never used anywhere in the codebase. Apply validation in `csv_io::read_csv`, `json_io::read_json`, and `excel_io::read_excel`.
+- [x] **Add input validation on data load** — Validate DBH > 0, 0 <= crown_ratio <= 1.0, height > 0 when present, expansion_factor > 0. Use the existing `ValidationError` variant which is currently defined but never used anywhere in the codebase. Apply validation in `csv_io::read_csv`, `json_io::read_json`, and `excel_io::read_excel`.
 
-- [ ] **Log warning for invalid tree status in Excel reader** — `excel_io.rs` silently defaults invalid status strings to `TreeStatus::Live` via `unwrap_or(TreeStatus::Live)`. Replace with `log::warn!()` to alert users about data quality issues while still loading the file.
+- [x] **Log warning for invalid tree status in Excel reader** — `excel_io.rs` silently defaults invalid status strings to `TreeStatus::Live` via `unwrap_or(TreeStatus::Live)`. Replace with `log::warn!()` to alert users about data quality issues while still loading the file.
 
-- [ ] **Remove or use `indicatif` crate** — `indicatif` is listed in Cargo.toml dependencies but never used in the codebase. Either remove it or add progress bars to large file load/write operations.
+- [x] **Remove or use `indicatif` crate** — `indicatif` is listed in Cargo.toml dependencies but never used in the codebase. Either remove it or add progress bars to large file load/write operations.
 
 ## Priority 2: Structural Improvements
 

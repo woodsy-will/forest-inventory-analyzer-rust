@@ -37,7 +37,6 @@ anyhow = "1"
 # Output & Visualization
 comfy-table = "7"
 colored = "2"
-indicatif = "0.17"
 
 # Logging
 log = "0.4"

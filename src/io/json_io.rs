@@ -7,6 +7,11 @@ use crate::models::ForestInventory;
 pub fn read_json(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> {
     let content = std::fs::read_to_string(path.as_ref())?;
     let inventory: ForestInventory = serde_json::from_str(&content)?;
+    for plot in &inventory.plots {
+        for tree in &plot.trees {
+            tree.validate()?;
+        }
+    }
     Ok(inventory)
 }
 

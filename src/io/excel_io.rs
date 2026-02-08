@@ -55,9 +55,13 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
 
         let plot_id = get_f64(0) as u32;
         let tree_id = get_f64(1) as u32;
-        let status: TreeStatus = get_string(7)
-            .parse()
-            .unwrap_or(TreeStatus::Live);
+        let status_str = get_string(7);
+        let status: TreeStatus = status_str.parse().unwrap_or_else(|_| {
+            log::warn!(
+                "Plot {plot_id}, Tree {tree_id}: unknown status '{status_str}', defaulting to Live"
+            );
+            TreeStatus::Live
+        });
 
         let tree = Tree {
             tree_id,
@@ -74,6 +78,8 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
             age: get_opt_f64(9).map(|v| v as u32),
             defect: get_opt_f64(10),
         };
+
+        tree.validate()?;
 
         let plot = plots.entry(plot_id).or_insert_with(|| Plot {
             plot_id,

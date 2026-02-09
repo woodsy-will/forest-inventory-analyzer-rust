@@ -78,11 +78,11 @@
 
 ## Priority 7: Error Handling & Resilience
 
-- [ ] **Return Result from AppState methods** — `state.rs` uses `expect()` for DB open, table creation, serialization, and every insert/select. These panic and crash the web server. Change `AppState::new()` to return `Result<Self, ForestError>` and propagate errors from `insert_inventory`, `insert_pending`, etc. through to handler responses.
+- [x] **Return Result from AppState methods** — `state.rs` uses `expect()` for DB open, table creation, serialization, and every insert/select. These panic and crash the web server. Change `AppState::new()` to return `Result<Self, ForestError>` and propagate errors from `insert_inventory`, `insert_pending`, etc. through to handler responses.
 
-- [ ] **Add CORS middleware** — No CORS headers are configured in `src/web/mod.rs`. Add `actix-cors` with a restrictive default policy so the API can be safely called from other origins without exposing it to cross-origin attacks.
+- [x] **Add CORS middleware** — No CORS headers are configured in `src/web/mod.rs`. Add `actix-cors` with a restrictive default policy so the API can be safely called from other origins without exposing it to cross-origin attacks.
 
-- [ ] **Add health check endpoint** — No `/health` or `/ready` endpoint exists. Add a lightweight `GET /health` handler returning 200 for use with load balancers, Kubernetes probes, and uptime monitors.
+- [x] **Add health check endpoint** — No `/health` or `/ready` endpoint exists. Add a lightweight `GET /health` handler returning 200 for use with load balancers, Kubernetes probes, and uptime monitors.
 
 ## Priority 8: Publishing & Developer Experience
 

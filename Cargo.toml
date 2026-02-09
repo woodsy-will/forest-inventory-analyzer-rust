@@ -53,10 +53,11 @@ uuid = { version = "1", features = ["v4", "serde"], optional = true }
 futures = { version = "0.3", optional = true }
 mime = { version = "0.3", optional = true }
 rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+actix-cors = { version = "0.7", optional = true }
 
 [features]
 default = ["web"]
-web = ["actix-web", "actix-multipart", "tokio", "uuid", "futures", "mime", "rusqlite"]
+web = ["actix-web", "actix-multipart", "tokio", "uuid", "futures", "mime", "rusqlite", "actix-cors"]
 
 [dev-dependencies]
 assert_approx_eq = "1"

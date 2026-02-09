@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::Connection;
 use uuid::Uuid;
 
+use crate::error::ForestError;
 use crate::io::EditableTreeRow;
 use crate::models::ForestInventory;
 
@@ -28,20 +29,22 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new() -> Self {
-        let conn =
-            Connection::open("forest_analyzer.db").expect("failed to open forest_analyzer.db");
+    pub fn new() -> Result<Self, ForestError> {
+        let conn = Connection::open("forest_analyzer.db")
+            .map_err(|e| ForestError::Database(format!("failed to open database: {e}")))?;
         Self::init_with_connection(conn)
     }
 
     /// Create an AppState backed by an in-memory SQLite database (for testing).
     #[cfg(test)]
-    pub fn new_in_memory() -> Self {
-        let conn = Connection::open_in_memory().expect("failed to open in-memory db");
+    pub fn new_in_memory() -> Result<Self, ForestError> {
+        let conn = Connection::open_in_memory().map_err(|e| {
+            ForestError::Database(format!("failed to open in-memory database: {e}"))
+        })?;
         Self::init_with_connection(conn)
     }
 
-    fn init_with_connection(conn: Connection) -> Self {
+    fn init_with_connection(conn: Connection) -> Result<Self, ForestError> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS inventories (
                 id TEXT PRIMARY KEY,
@@ -56,85 +59,114 @@ impl AppState {
                 created_at INTEGER NOT NULL
             );",
         )
-        .expect("failed to create database tables");
+        .map_err(|e| ForestError::Database(format!("failed to create tables: {e}")))?;
 
-        Self {
+        Ok(Self {
             db: Mutex::new(conn),
-        }
+        })
     }
 
-    pub fn get_inventory(&self, id: &Uuid) -> Option<ForestInventory> {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    fn lock_db(&self) -> Result<std::sync::MutexGuard<'_, Connection>, ForestError> {
+        self.db
+            .lock()
+            .map_err(|_| ForestError::Database("database mutex poisoned".to_string()))
+    }
+
+    pub fn get_inventory(&self, id: &Uuid) -> Result<Option<ForestInventory>, ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
 
         let mut stmt = conn
             .prepare("SELECT data FROM inventories WHERE id = ?1")
-            .expect("failed to prepare inventory select");
+            .map_err(|e| ForestError::Database(format!("failed to prepare query: {e}")))?;
 
-        stmt.query_row([id.to_string()], |row| {
-            let json: String = row.get(0)?;
-            Ok(json)
-        })
-        .ok()
-        .and_then(|json| serde_json::from_str(&json).ok())
+        let json = stmt
+            .query_row([id.to_string()], |row| {
+                let json: String = row.get(0)?;
+                Ok(json)
+            })
+            .ok();
+
+        match json {
+            Some(j) => {
+                let inv = serde_json::from_str(&j)?;
+                Ok(Some(inv))
+            }
+            None => Ok(None),
+        }
     }
 
-    pub fn insert_inventory(&self, id: Uuid, inventory: ForestInventory) {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    pub fn insert_inventory(
+        &self,
+        id: Uuid,
+        inventory: ForestInventory,
+    ) -> Result<(), ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
         evict_if_full(&conn, "inventories", MAX_INVENTORIES);
 
-        let json = serde_json::to_string(&inventory).expect("failed to serialize inventory");
+        let json = serde_json::to_string(&inventory)?;
         conn.execute(
             "INSERT OR REPLACE INTO inventories (id, name, data, created_at) VALUES (?1, ?2, ?3, ?4)",
             (id.to_string(), &inventory.name, &json, unix_now()),
         )
-        .expect("failed to insert inventory");
+        .map_err(|e| ForestError::Database(format!("failed to insert inventory: {e}")))?;
+        Ok(())
     }
 
-    pub fn get_pending_name(&self, id: &Uuid) -> Option<String> {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    pub fn get_pending_name(&self, id: &Uuid) -> Result<Option<String>, ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
 
         let mut stmt = conn
             .prepare("SELECT name FROM pending_rows WHERE id = ?1")
-            .expect("failed to prepare pending name select");
+            .map_err(|e| ForestError::Database(format!("failed to prepare query: {e}")))?;
 
-        stmt.query_row([id.to_string()], |row| row.get(0)).ok()
+        Ok(stmt.query_row([id.to_string()], |row| row.get(0)).ok())
     }
 
-    pub fn has_pending(&self, id: &Uuid) -> bool {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    pub fn has_pending(&self, id: &Uuid) -> Result<bool, ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
 
         let mut stmt = conn
             .prepare("SELECT EXISTS(SELECT 1 FROM pending_rows WHERE id = ?1)")
-            .expect("failed to prepare pending exists check");
+            .map_err(|e| ForestError::Database(format!("failed to prepare query: {e}")))?;
 
-        stmt.query_row([id.to_string()], |row| row.get::<_, bool>(0))
-            .unwrap_or(false)
+        Ok(stmt
+            .query_row([id.to_string()], |row| row.get::<_, bool>(0))
+            .unwrap_or(false))
     }
 
-    pub fn insert_pending(&self, id: Uuid, name: String, rows: Vec<EditableTreeRow>) {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    pub fn insert_pending(
+        &self,
+        id: Uuid,
+        name: String,
+        rows: Vec<EditableTreeRow>,
+    ) -> Result<(), ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
         evict_if_full(&conn, "pending_rows", MAX_PENDING);
 
-        let json = serde_json::to_string(&rows).expect("failed to serialize pending rows");
+        let json = serde_json::to_string(&rows)?;
         conn.execute(
             "INSERT OR REPLACE INTO pending_rows (id, name, rows, created_at) VALUES (?1, ?2, ?3, ?4)",
             (id.to_string(), &name, &json, unix_now()),
         )
-        .expect("failed to insert pending rows");
+        .map_err(|e| ForestError::Database(format!("failed to insert pending rows: {e}")))?;
+        Ok(())
     }
 
-    pub fn remove_pending(&self, id: &Uuid) -> Option<(String, Vec<EditableTreeRow>)> {
-        let conn = self.db.lock().expect("db mutex poisoned");
+    pub fn remove_pending(
+        &self,
+        id: &Uuid,
+    ) -> Result<Option<(String, Vec<EditableTreeRow>)>, ForestError> {
+        let conn = self.lock_db()?;
         evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
 
         let mut stmt = conn
             .prepare("SELECT name, rows FROM pending_rows WHERE id = ?1")
-            .expect("failed to prepare pending select");
+            .map_err(|e| ForestError::Database(format!("failed to prepare query: {e}")))?;
 
         let result = stmt
             .query_row([id.to_string()], |row| {
@@ -144,14 +176,16 @@ impl AppState {
             })
             .ok();
 
-        if let Some((name, json)) = result {
-            conn.execute("DELETE FROM pending_rows WHERE id = ?1", [id.to_string()])
-                .expect("failed to delete pending rows");
-            let rows: Vec<EditableTreeRow> =
-                serde_json::from_str(&json).expect("failed to deserialize pending rows");
-            Some((name, rows))
-        } else {
-            None
+        match result {
+            Some((name, json)) => {
+                conn.execute("DELETE FROM pending_rows WHERE id = ?1", [id.to_string()])
+                    .map_err(|e| {
+                        ForestError::Database(format!("failed to delete pending rows: {e}"))
+                    })?;
+                let rows: Vec<EditableTreeRow> = serde_json::from_str(&json)?;
+                Ok(Some((name, rows)))
+            }
+            None => Ok(None),
         }
     }
 }
@@ -279,15 +313,18 @@ mod tests {
 
     #[test]
     fn test_inventory_insert_and_get() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let inv = sample_inventory("Test");
 
-        assert!(state.get_inventory(&id).is_none());
+        assert!(state.get_inventory(&id).unwrap().is_none());
 
-        state.insert_inventory(id, inv.clone());
+        state.insert_inventory(id, inv.clone()).unwrap();
 
-        let loaded = state.get_inventory(&id).expect("should find inventory");
+        let loaded = state
+            .get_inventory(&id)
+            .unwrap()
+            .expect("should find inventory");
         assert_eq!(loaded.name, "Test");
         assert_eq!(loaded.num_plots(), 1);
         assert_eq!(loaded.num_trees(), 1);
@@ -295,20 +332,27 @@ mod tests {
 
     #[test]
     fn test_inventory_overwrite() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
 
-        state.insert_inventory(id, sample_inventory("First"));
-        state.insert_inventory(id, sample_inventory("Second"));
+        state
+            .insert_inventory(id, sample_inventory("First"))
+            .unwrap();
+        state
+            .insert_inventory(id, sample_inventory("Second"))
+            .unwrap();
 
-        let loaded = state.get_inventory(&id).expect("should find inventory");
+        let loaded = state
+            .get_inventory(&id)
+            .unwrap()
+            .expect("should find inventory");
         assert_eq!(loaded.name, "Second");
     }
 
     #[test]
     fn test_inventory_nonexistent_returns_none() {
-        let state = AppState::new_in_memory();
-        assert!(state.get_inventory(&Uuid::new_v4()).is_none());
+        let state = AppState::new_in_memory().unwrap();
+        assert!(state.get_inventory(&Uuid::new_v4()).unwrap().is_none());
     }
 
     // -----------------------------------------------------------------------
@@ -317,51 +361,63 @@ mod tests {
 
     #[test]
     fn test_pending_insert_and_has() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
 
-        assert!(!state.has_pending(&id));
+        assert!(!state.has_pending(&id).unwrap());
 
-        state.insert_pending(id, "test.csv".to_string(), sample_rows());
+        state
+            .insert_pending(id, "test.csv".to_string(), sample_rows())
+            .unwrap();
 
-        assert!(state.has_pending(&id));
+        assert!(state.has_pending(&id).unwrap());
     }
 
     #[test]
     fn test_pending_get_name() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
 
-        assert!(state.get_pending_name(&id).is_none());
+        assert!(state.get_pending_name(&id).unwrap().is_none());
 
-        state.insert_pending(id, "my_file.csv".to_string(), sample_rows());
+        state
+            .insert_pending(id, "my_file.csv".to_string(), sample_rows())
+            .unwrap();
 
-        assert_eq!(state.get_pending_name(&id), Some("my_file.csv".to_string()));
+        assert_eq!(
+            state.get_pending_name(&id).unwrap(),
+            Some("my_file.csv".to_string())
+        );
     }
 
     #[test]
     fn test_pending_remove() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let rows = sample_rows();
 
-        state.insert_pending(id, "test.csv".to_string(), rows.clone());
-        assert!(state.has_pending(&id));
+        state
+            .insert_pending(id, "test.csv".to_string(), rows.clone())
+            .unwrap();
+        assert!(state.has_pending(&id).unwrap());
 
-        let (name, returned_rows) = state.remove_pending(&id).expect("should find pending");
+        let (name, returned_rows) = state
+            .remove_pending(&id)
+            .unwrap()
+            .expect("should find pending");
         assert_eq!(name, "test.csv");
         assert_eq!(returned_rows.len(), rows.len());
         assert_eq!(returned_rows[0].dbh, 14.0);
 
         // Should be gone after removal
-        assert!(!state.has_pending(&id));
-        assert!(state.remove_pending(&id).is_none());
+        assert!(!state.has_pending(&id).unwrap());
+        assert!(state.remove_pending(&id).unwrap().is_none());
     }
 
     #[test]
     fn test_pending_nonexistent_remove_returns_none() {
-        let state = AppState::new_in_memory();
-        assert!(state.remove_pending(&Uuid::new_v4()).is_none());
+        let state = AppState::new_in_memory().unwrap();
+        assert!(state.remove_pending(&Uuid::new_v4()).unwrap().is_none());
     }
 
     // -----------------------------------------------------------------------
@@ -370,52 +426,60 @@ mod tests {
 
     #[test]
     fn test_inventory_ttl_eviction() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Expired"));
+        state
+            .insert_inventory(id, sample_inventory("Expired"))
+            .unwrap();
 
         // Backdate beyond the 2-hour TTL
         state.backdate_inventory(&id, INVENTORY_TTL_SECS + 60);
 
         // Next access should evict it
-        assert!(state.get_inventory(&id).is_none());
+        assert!(state.get_inventory(&id).unwrap().is_none());
     }
 
     #[test]
     fn test_inventory_not_evicted_when_fresh() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Fresh"));
+        state
+            .insert_inventory(id, sample_inventory("Fresh"))
+            .unwrap();
 
         // Backdate but still within TTL
         state.backdate_inventory(&id, INVENTORY_TTL_SECS - 60);
 
-        assert!(state.get_inventory(&id).is_some());
+        assert!(state.get_inventory(&id).unwrap().is_some());
     }
 
     #[test]
     fn test_pending_ttl_eviction() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_pending(id, "expired.csv".to_string(), sample_rows());
+        state
+            .insert_pending(id, "expired.csv".to_string(), sample_rows())
+            .unwrap();
 
         // Backdate beyond the 30-minute TTL
         state.backdate_pending(&id, PENDING_TTL_SECS + 60);
 
         // Next access should evict it
-        assert!(!state.has_pending(&id));
-        assert!(state.get_pending_name(&id).is_none());
+        assert!(!state.has_pending(&id).unwrap());
+        assert!(state.get_pending_name(&id).unwrap().is_none());
     }
 
     #[test]
     fn test_pending_not_evicted_when_fresh() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_pending(id, "fresh.csv".to_string(), sample_rows());
+        state
+            .insert_pending(id, "fresh.csv".to_string(), sample_rows())
+            .unwrap();
 
         state.backdate_pending(&id, PENDING_TTL_SECS - 60);
 
-        assert!(state.has_pending(&id));
+        assert!(state.has_pending(&id).unwrap());
     }
 
     // -----------------------------------------------------------------------
@@ -424,7 +488,7 @@ mod tests {
 
     #[test]
     fn test_inventory_capacity_eviction() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let inv = sample_inventory("Cap");
         let now = unix_now();
 
@@ -439,29 +503,31 @@ mod tests {
 
         // Insert one more — should evict the oldest (ids[0])
         let new_id = Uuid::new_v4();
-        state.insert_inventory(new_id, inv);
+        state.insert_inventory(new_id, inv).unwrap();
 
-        assert!(state.get_inventory(&new_id).is_some());
-        // The oldest should have been evicted
-        // (Note: the eviction happens before the insert, and the oldest by created_at is ids[0])
+        assert!(state.get_inventory(&new_id).unwrap().is_some());
     }
 
     #[test]
     fn test_pending_capacity_eviction() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let rows = sample_rows();
 
         // Fill to MAX_PENDING
         for _ in 0..MAX_PENDING {
-            state.insert_pending(Uuid::new_v4(), "file.csv".to_string(), rows.clone());
+            state
+                .insert_pending(Uuid::new_v4(), "file.csv".to_string(), rows.clone())
+                .unwrap();
         }
         assert_eq!(state.count_rows("pending_rows"), MAX_PENDING);
 
         // Insert one more — should evict oldest
         let new_id = Uuid::new_v4();
-        state.insert_pending(new_id, "new.csv".to_string(), rows);
+        state
+            .insert_pending(new_id, "new.csv".to_string(), rows)
+            .unwrap();
 
-        assert!(state.has_pending(&new_id));
+        assert!(state.has_pending(&new_id).unwrap());
         // Count should still be at MAX_PENDING (one evicted, one added)
         assert_eq!(state.count_rows("pending_rows"), MAX_PENDING);
     }
@@ -472,12 +538,12 @@ mod tests {
 
     #[test]
     fn test_inventory_data_preserved_through_serialization() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let inv = sample_inventory("Roundtrip");
 
-        state.insert_inventory(id, inv);
-        let loaded = state.get_inventory(&id).unwrap();
+        state.insert_inventory(id, inv).unwrap();
+        let loaded = state.get_inventory(&id).unwrap().unwrap();
 
         assert_eq!(loaded.plots[0].trees[0].dbh, 14.0);
         assert_eq!(loaded.plots[0].trees[0].height, Some(90.0));
@@ -487,12 +553,14 @@ mod tests {
 
     #[test]
     fn test_pending_rows_data_preserved() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let rows = sample_rows();
 
-        state.insert_pending(id, "data.csv".to_string(), rows);
-        let (name, loaded) = state.remove_pending(&id).unwrap();
+        state
+            .insert_pending(id, "data.csv".to_string(), rows)
+            .unwrap();
+        let (name, loaded) = state.remove_pending(&id).unwrap().unwrap();
 
         assert_eq!(name, "data.csv");
         assert_eq!(loaded[0].species_code, "DF");
@@ -503,14 +571,18 @@ mod tests {
 
     #[test]
     fn test_multiple_inventories_independent() {
-        let state = AppState::new_in_memory();
+        let state = AppState::new_in_memory().unwrap();
         let id1 = Uuid::new_v4();
         let id2 = Uuid::new_v4();
 
-        state.insert_inventory(id1, sample_inventory("First"));
-        state.insert_inventory(id2, sample_inventory("Second"));
+        state
+            .insert_inventory(id1, sample_inventory("First"))
+            .unwrap();
+        state
+            .insert_inventory(id2, sample_inventory("Second"))
+            .unwrap();
 
-        assert_eq!(state.get_inventory(&id1).unwrap().name, "First");
-        assert_eq!(state.get_inventory(&id2).unwrap().name, "Second");
+        assert_eq!(state.get_inventory(&id1).unwrap().unwrap().name, "First");
+        assert_eq!(state.get_inventory(&id2).unwrap().unwrap().name, "Second");
     }
 }

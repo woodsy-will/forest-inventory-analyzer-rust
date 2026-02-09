@@ -167,7 +167,7 @@ pub async fn upload(
                 trees: rows.clone(),
                 species: species_from_rows(&rows),
             };
-            state.insert_pending(id, inv_name, rows);
+            state.insert_pending(id, inv_name, rows)?;
             return Ok(HttpResponse::Ok().json(resp));
         } else {
             // No errors — build inventory and store it
@@ -186,7 +186,7 @@ pub async fn upload(
                     .map(|s| s.common_name)
                     .collect(),
             };
-            state.insert_inventory(id, inventory);
+            state.insert_inventory(id, inventory)?;
             return Ok(HttpResponse::Ok().json(resp));
         }
     }
@@ -212,7 +212,7 @@ pub async fn validate_and_submit(
     body: web::Json<ValidateRequest>,
 ) -> Result<HttpResponse, WebError> {
     // Reject requests for unknown IDs — must come from a prior upload
-    if !state.has_pending(&body.id) {
+    if !state.has_pending(&body.id)? {
         return Ok(HttpResponse::NotFound().json(ErrorBody {
             error: "Not Found".to_string(),
             details: format!("No pending upload found for id {}", body.id),
@@ -259,9 +259,9 @@ pub async fn validate_and_submit(
     if has_errors {
         // Update pending rows, preserving the original name
         let name = state
-            .get_pending_name(&body.id)
+            .get_pending_name(&body.id)?
             .unwrap_or_else(|| "Unknown".to_string());
-        state.insert_pending(body.id, name.clone(), body.trees.clone());
+        state.insert_pending(body.id, name.clone(), body.trees.clone())?;
 
         let resp = UploadResponse {
             id: body.id,
@@ -277,7 +277,7 @@ pub async fn validate_and_submit(
     } else {
         // Clean — build inventory, move from pending to inventories
         let name = state
-            .remove_pending(&body.id)
+            .remove_pending(&body.id)?
             .map(|(n, _)| n)
             .unwrap_or_else(|| "Unknown".to_string());
         let inventory = rows_to_inventory(&name, &body.trees);
@@ -295,7 +295,7 @@ pub async fn validate_and_submit(
                 .map(|s| s.common_name)
                 .collect(),
         };
-        state.insert_inventory(body.id, inventory);
+        state.insert_inventory(body.id, inventory)?;
         Ok(HttpResponse::Ok().json(resp))
     }
 }
@@ -306,7 +306,7 @@ pub async fn metrics(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let analyzer = Analyzer::new(&inventory);
     Ok(HttpResponse::Ok().json(analyzer.stand_metrics()))
@@ -324,7 +324,7 @@ pub async fn statistics(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let confidence = query.confidence.unwrap_or(0.95);
     let analyzer = Analyzer::new(&inventory);
@@ -344,7 +344,7 @@ pub async fn distribution(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let class_width = query.class_width.unwrap_or(2.0);
     let analyzer = Analyzer::new(&inventory);
@@ -364,7 +364,7 @@ pub async fn growth(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let analyzer = Analyzer::new(&inventory);
     let projections = analyzer.project_growth(&body.model, body.years)?;
@@ -383,7 +383,7 @@ pub async fn export(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let fmt = query.format.as_deref().unwrap_or("csv");
 
@@ -474,9 +474,17 @@ pub async fn inventory_json(
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
     let inventory = state
-        .get_inventory(&id)
+        .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     Ok(HttpResponse::Ok().json(inventory))
+}
+
+// ---------------------------------------------------------------------------
+// Health check
+// ---------------------------------------------------------------------------
+
+pub async fn health() -> HttpResponse {
+    HttpResponse::Ok().json(serde_json::json!({"status": "ok"}))
 }
 
 // ---------------------------------------------------------------------------
@@ -612,6 +620,7 @@ mod tests {
         App::new()
             .app_data(data)
             .app_data(web::JsonConfig::default().limit(10 * 1024 * 1024))
+            .route("/health", web::get().to(health))
             .route("/api/upload", web::post().to(upload))
             .route("/api/validate", web::post().to(validate_and_submit))
             .route("/api/{id}/metrics", web::get().to(metrics))
@@ -628,9 +637,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_metrics_success() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Test"));
+        state
+            .insert_inventory(id, sample_inventory("Test"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -646,7 +657,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_metrics_not_found() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let app = actix_test::init_service(make_app(state)).await;
 
         let fake_id = Uuid::new_v4();
@@ -664,9 +675,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_statistics_success() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Stats"));
+        state
+            .insert_inventory(id, sample_inventory("Stats"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -681,7 +694,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_statistics_not_found() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let app = actix_test::init_service(make_app(state)).await;
 
         let req = actix_test::TestRequest::get()
@@ -698,9 +711,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_distribution_success() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Dist"));
+        state
+            .insert_inventory(id, sample_inventory("Dist"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -719,9 +734,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_growth_success() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Growth"));
+        state
+            .insert_inventory(id, sample_inventory("Growth"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::post()
@@ -741,7 +758,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_growth_not_found() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let app = actix_test::init_service(make_app(state)).await;
 
         let req = actix_test::TestRequest::post()
@@ -762,9 +779,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_export_csv() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Export"));
+        state
+            .insert_inventory(id, sample_inventory("Export"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -785,9 +804,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_export_json() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("JsonExport"));
+        state
+            .insert_inventory(id, sample_inventory("JsonExport"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -804,9 +825,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_export_unsupported_format() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("Test"));
+        state
+            .insert_inventory(id, sample_inventory("Test"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -819,7 +842,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_export_not_found() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let app = actix_test::init_service(make_app(state)).await;
 
         let req = actix_test::TestRequest::get()
@@ -836,9 +859,11 @@ mod tests {
 
     #[actix_web::test]
     async fn test_inventory_json_success() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
-        state.insert_inventory(id, sample_inventory("InvJson"));
+        state
+            .insert_inventory(id, sample_inventory("InvJson"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -857,7 +882,7 @@ mod tests {
 
     #[actix_web::test]
     async fn test_validate_unknown_id_returns_404() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let app = actix_test::init_service(make_app(state)).await;
 
         let req = actix_test::TestRequest::post()
@@ -874,12 +899,14 @@ mod tests {
 
     #[actix_web::test]
     async fn test_validate_valid_rows_promotes_to_inventory() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let rows = valid_rows();
 
         // Seed pending rows (simulates a prior upload with errors)
-        state.insert_pending(id, "test.csv".to_string(), rows.clone());
+        state
+            .insert_pending(id, "test.csv".to_string(), rows.clone())
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::post()
@@ -900,12 +927,14 @@ mod tests {
 
     #[actix_web::test]
     async fn test_validate_invalid_rows_returns_errors() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let mut rows = valid_rows();
         rows[0].dbh = -5.0; // Invalid DBH
 
-        state.insert_pending(id, "bad.csv".to_string(), rows.clone());
+        state
+            .insert_pending(id, "bad.csv".to_string(), rows.clone())
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::post()
@@ -925,12 +954,14 @@ mod tests {
 
     #[actix_web::test]
     async fn test_validate_invalid_status_returns_error() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         let mut rows = valid_rows();
         rows[0].status = "Unknown".to_string();
 
-        state.insert_pending(id, "status.csv".to_string(), rows.clone());
+        state
+            .insert_pending(id, "status.csv".to_string(), rows.clone())
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::post()
@@ -954,10 +985,12 @@ mod tests {
 
     #[actix_web::test]
     async fn test_export_sanitizes_special_characters_in_name() {
-        let state = super::super::state::AppState::new_in_memory();
+        let state = super::super::state::AppState::new_in_memory().unwrap();
         let id = Uuid::new_v4();
         // Name with characters that should be stripped
-        state.insert_inventory(id, sample_inventory("test<script>alert('xss')"));
+        state
+            .insert_inventory(id, sample_inventory("test<script>alert('xss')"))
+            .unwrap();
 
         let app = actix_test::init_service(make_app(state)).await;
         let req = actix_test::TestRequest::get()
@@ -1020,5 +1053,22 @@ mod tests {
             .to_str()
             .unwrap()
             .contains("text/css"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Health check endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_health_returns_ok() {
+        let state = super::super::state::AppState::new_in_memory().unwrap();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::get().uri("/health").to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert_eq!(body["status"], "ok");
     }
 }

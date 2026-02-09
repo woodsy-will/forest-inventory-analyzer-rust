@@ -65,3 +65,41 @@
 - [x] **Add CI/CD pipeline** — Set up GitHub Actions workflow for `cargo test`, `cargo clippy`, and `cargo fmt --check` on push/PR to master.
 
 - [x] **Database-backed persistence** — The in-memory `HashMap` storage for inventories won't scale for concurrent users or server restarts. Consider SQLite or similar for persistence.
+
+---
+
+## Priority 6: Test Coverage & Robustness
+
+- [ ] **Add web handler integration tests** — `handlers.rs` (500+ lines) has zero tests. Add `actix_web::test` tests for: upload with valid CSV/JSON/Excel, validation error flow (invalid → edit → resubmit), UUID provenance rejection for unknown IDs, export with special characters in filenames, and error responses (404, 400, 422).
+
+- [ ] **Add SQLite state unit tests** — `state.rs` has no tests for the new SQLite persistence layer. Test: insert/get/remove round-trips, TTL eviction (insert with past timestamp, verify removal), capacity eviction (exceed `MAX_INVENTORIES`/`MAX_PENDING`, verify oldest removed), and behavior when DB file is missing or corrupted.
+
+- [ ] **Add I/O edge case tests** — Test: Excel files with 0 data rows, empty cells, and mixed types; CSV with UTF-8 BOM, Windows line endings (`\r\n`), and quoted commas in species names; JSON with extra/missing fields and null optional values.
+
+## Priority 7: Error Handling & Resilience
+
+- [ ] **Return Result from AppState methods** — `state.rs` uses `expect()` for DB open, table creation, serialization, and every insert/select. These panic and crash the web server. Change `AppState::new()` to return `Result<Self, ForestError>` and propagate errors from `insert_inventory`, `insert_pending`, etc. through to handler responses.
+
+- [ ] **Add CORS middleware** — No CORS headers are configured in `src/web/mod.rs`. Add `actix-cors` with a restrictive default policy so the API can be safely called from other origins without exposing it to cross-origin attacks.
+
+- [ ] **Add health check endpoint** — No `/health` or `/ready` endpoint exists. Add a lightweight `GET /health` handler returning 200 for use with load balancers, Kubernetes probes, and uptime monitors.
+
+## Priority 8: Publishing & Developer Experience
+
+- [ ] **Fix README placeholders** — `README.md` lines 3 and 21 contain `YOUR_USERNAME`. Replace with actual GitHub username. Add a section documenting the `examples/` directory and `cargo run --example` commands. Mention the web UI feature and `cargo run -- serve`.
+
+- [ ] **Add Cargo.toml publishing metadata** — Missing `repository`, `documentation`, and `homepage` fields needed for crates.io. Add `exclude` to keep `.github/`, `.claude/`, and test fixtures out of the published crate.
+
+- [ ] **Expand library re-exports** — `lib.rs` re-exports `Analyzer` but not `GrowthModel`, `DiameterDistribution`, `StandMetrics`, `SamplingStatistics`, `GrowthProjection`, or `ConfidenceInterval`. Add these so users don't need to reach into submodules for common types.
+
+- [ ] **Add doc comments with examples to public API** — Public methods like `Tree::basal_area_sqft`, `Tree::volume_cuft`, `Plot::trees_per_acre`, and `ForestInventory::mean_tpa` lack doc-test examples. Add `/// # Examples` blocks so `cargo doc` and docs.rs show usage inline.
+
+## Priority 9: Features & Performance
+
+- [ ] **Add batch processing CLI command** — Currently the CLI processes one file at a time. Add `analyze-batch --input-dir ./inventories/ --output-dir ./reports/` to process multiple inventory files and optionally produce aggregated cross-inventory statistics.
+
+- [ ] **Add GeoJSON export** — Plots have elevation, aspect, and slope attributes but no geospatial export. Add `GeoJsonFormat` implementing `InventoryWriter`, and add `format=geojson` to the web export endpoint. Use the `geojson` crate.
+
+- [ ] **Optimize species_list deduplication** — `ForestInventory::species_list()` in `inventory.rs` collects all species into a Vec, sorts, and deduplicates. Use a `HashSet` or `IndexSet` for O(n) dedup instead of O(n log n) sort+dedup, which matters on inventories with 1000+ trees.
+
+- [ ] **Add configuration file support** — All settings (DB path, upload size limit, default growth model params, server port) are hardcoded or CLI-only. Add optional `config.toml` support via the `config` crate so deployment-specific settings persist without CLI flags.

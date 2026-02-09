@@ -63,7 +63,7 @@ impl actix_web::ResponseError for WebError {
 // Upload response
 // ---------------------------------------------------------------------------
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct UploadResponse {
     id: Uuid,
     name: String,
@@ -499,4 +499,526 @@ pub async fn style_css() -> HttpResponse {
     HttpResponse::Ok()
         .content_type("text/css; charset=utf-8")
         .body(include_str!("../../static/style.css"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_web::test as actix_test;
+    use actix_web::App;
+
+    use crate::io::EditableTreeRow;
+    use crate::models::{ForestInventory, Plot, Species, Tree, TreeStatus};
+
+    fn sample_inventory(name: &str) -> ForestInventory {
+        let mut inv = ForestInventory::new(name);
+        inv.plots.push(Plot {
+            plot_id: 1,
+            plot_size_acres: 0.2,
+            slope_percent: Some(15.0),
+            aspect_degrees: Some(180.0),
+            elevation_ft: Some(3200.0),
+            trees: vec![
+                Tree {
+                    tree_id: 1,
+                    plot_id: 1,
+                    species: Species {
+                        common_name: "Douglas Fir".to_string(),
+                        code: "DF".to_string(),
+                    },
+                    dbh: 14.0,
+                    height: Some(90.0),
+                    crown_ratio: Some(0.5),
+                    status: TreeStatus::Live,
+                    expansion_factor: 5.0,
+                    age: Some(60),
+                    defect: None,
+                },
+                Tree {
+                    tree_id: 2,
+                    plot_id: 1,
+                    species: Species {
+                        common_name: "Western Red Cedar".to_string(),
+                        code: "WRC".to_string(),
+                    },
+                    dbh: 18.0,
+                    height: Some(100.0),
+                    crown_ratio: Some(0.4),
+                    status: TreeStatus::Live,
+                    expansion_factor: 5.0,
+                    age: Some(80),
+                    defect: None,
+                },
+            ],
+        });
+        inv.plots.push(Plot {
+            plot_id: 2,
+            plot_size_acres: 0.2,
+            slope_percent: Some(20.0),
+            aspect_degrees: Some(220.0),
+            elevation_ft: Some(3400.0),
+            trees: vec![Tree {
+                tree_id: 1,
+                plot_id: 2,
+                species: Species {
+                    common_name: "Douglas Fir".to_string(),
+                    code: "DF".to_string(),
+                },
+                dbh: 16.0,
+                height: Some(95.0),
+                crown_ratio: Some(0.45),
+                status: TreeStatus::Live,
+                expansion_factor: 5.0,
+                age: Some(70),
+                defect: None,
+            }],
+        });
+        inv
+    }
+
+    fn valid_rows() -> Vec<EditableTreeRow> {
+        vec![EditableTreeRow {
+            row_index: 0,
+            plot_id: 1,
+            tree_id: 1,
+            species_code: "DF".to_string(),
+            species_name: "Douglas Fir".to_string(),
+            dbh: 14.0,
+            height: Some(90.0),
+            crown_ratio: Some(0.5),
+            status: "Live".to_string(),
+            expansion_factor: 5.0,
+            age: Some(60),
+            defect: None,
+            plot_size_acres: Some(0.2),
+            slope_percent: None,
+            aspect_degrees: None,
+            elevation_ft: None,
+        }]
+    }
+
+    fn make_app(
+        state: super::super::state::AppState,
+    ) -> actix_web::App<
+        impl actix_web::dev::ServiceFactory<
+            actix_web::dev::ServiceRequest,
+            Config = (),
+            Response = actix_web::dev::ServiceResponse,
+            Error = actix_web::Error,
+            InitError = (),
+        >,
+    > {
+        let data = web::Data::new(state);
+        App::new()
+            .app_data(data)
+            .app_data(web::JsonConfig::default().limit(10 * 1024 * 1024))
+            .route("/api/upload", web::post().to(upload))
+            .route("/api/validate", web::post().to(validate_and_submit))
+            .route("/api/{id}/metrics", web::get().to(metrics))
+            .route("/api/{id}/statistics", web::get().to(statistics))
+            .route("/api/{id}/distribution", web::get().to(distribution))
+            .route("/api/{id}/growth", web::post().to(growth))
+            .route("/api/{id}/export", web::get().to(export))
+            .route("/api/{id}/inventory", web::get().to(inventory_json))
+    }
+
+    // -----------------------------------------------------------------------
+    // Metrics endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_metrics_success() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Test"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/metrics"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body["total_tpa"].as_f64().unwrap() > 0.0);
+        assert!(body["total_basal_area"].as_f64().unwrap() > 0.0);
+    }
+
+    #[actix_web::test]
+    async fn test_metrics_not_found() {
+        let state = super::super::state::AppState::new_in_memory();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let fake_id = Uuid::new_v4();
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{fake_id}/metrics"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 404);
+    }
+
+    // -----------------------------------------------------------------------
+    // Statistics endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_statistics_success() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Stats"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/statistics?confidence=0.95"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body["tpa"]["mean"].as_f64().is_some());
+    }
+
+    #[actix_web::test]
+    async fn test_statistics_not_found() {
+        let state = super::super::state::AppState::new_in_memory();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{}/statistics", Uuid::new_v4()))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 404);
+    }
+
+    // -----------------------------------------------------------------------
+    // Distribution endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_distribution_success() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Dist"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/distribution?class_width=2"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert!(body["classes"].as_array().is_some());
+    }
+
+    // -----------------------------------------------------------------------
+    // Growth endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_growth_success() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Growth"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::post()
+            .uri(&format!("/api/{id}/growth"))
+            .set_json(serde_json::json!({
+                "model": {"Logistic": {"annual_rate": 0.03, "carrying_capacity": 300.0, "mortality_rate": 0.005}},
+                "years": 10
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        let arr = body.as_array().unwrap();
+        assert_eq!(arr.len(), 11); // year 0 through 10
+    }
+
+    #[actix_web::test]
+    async fn test_growth_not_found() {
+        let state = super::super::state::AppState::new_in_memory();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::post()
+            .uri(&format!("/api/{}/growth", Uuid::new_v4()))
+            .set_json(serde_json::json!({
+                "model": {"Exponential": {"annual_rate": 0.03, "mortality_rate": 0.005}},
+                "years": 5
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 404);
+    }
+
+    // -----------------------------------------------------------------------
+    // Export endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_export_csv() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Export"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/export?format=csv"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        assert_eq!(resp.headers().get("content-type").unwrap(), "text/csv");
+        assert!(resp
+            .headers()
+            .get("content-disposition")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Export.csv"));
+    }
+
+    #[actix_web::test]
+    async fn test_export_json() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("JsonExport"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/export?format=json"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "application/json"
+        );
+    }
+
+    #[actix_web::test]
+    async fn test_export_unsupported_format() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("Test"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/export?format=xml"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 400);
+    }
+
+    #[actix_web::test]
+    async fn test_export_not_found() {
+        let state = super::super::state::AppState::new_in_memory();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{}/export", Uuid::new_v4()))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 404);
+    }
+
+    // -----------------------------------------------------------------------
+    // Inventory JSON endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_inventory_json_success() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        state.insert_inventory(id, sample_inventory("InvJson"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/inventory"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = actix_test::read_body_json(resp).await;
+        assert_eq!(body["name"], "InvJson");
+    }
+
+    // -----------------------------------------------------------------------
+    // Validate endpoint
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_validate_unknown_id_returns_404() {
+        let state = super::super::state::AppState::new_in_memory();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::post()
+            .uri("/api/validate")
+            .set_json(serde_json::json!({
+                "id": Uuid::new_v4(),
+                "trees": []
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[actix_web::test]
+    async fn test_validate_valid_rows_promotes_to_inventory() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        let rows = valid_rows();
+
+        // Seed pending rows (simulates a prior upload with errors)
+        state.insert_pending(id, "test.csv".to_string(), rows.clone());
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::post()
+            .uri("/api/validate")
+            .set_json(serde_json::json!({
+                "id": id,
+                "trees": rows
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: UploadResponse = actix_test::read_body_json(resp).await;
+        assert!(!body.has_errors);
+        assert_eq!(body.id, id);
+        assert_eq!(body.num_trees, 1);
+    }
+
+    #[actix_web::test]
+    async fn test_validate_invalid_rows_returns_errors() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        let mut rows = valid_rows();
+        rows[0].dbh = -5.0; // Invalid DBH
+
+        state.insert_pending(id, "bad.csv".to_string(), rows.clone());
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::post()
+            .uri("/api/validate")
+            .set_json(serde_json::json!({
+                "id": id,
+                "trees": rows
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: UploadResponse = actix_test::read_body_json(resp).await;
+        assert!(body.has_errors);
+        assert!(!body.errors.is_empty());
+    }
+
+    #[actix_web::test]
+    async fn test_validate_invalid_status_returns_error() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        let mut rows = valid_rows();
+        rows[0].status = "Unknown".to_string();
+
+        state.insert_pending(id, "status.csv".to_string(), rows.clone());
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::post()
+            .uri("/api/validate")
+            .set_json(serde_json::json!({
+                "id": id,
+                "trees": rows
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let body: UploadResponse = actix_test::read_body_json(resp).await;
+        assert!(body.has_errors);
+        assert!(body.errors.iter().any(|e| e.field == "status"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Export filename sanitization
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_export_sanitizes_special_characters_in_name() {
+        let state = super::super::state::AppState::new_in_memory();
+        let id = Uuid::new_v4();
+        // Name with characters that should be stripped
+        state.insert_inventory(id, sample_inventory("test<script>alert('xss')"));
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::get()
+            .uri(&format!("/api/{id}/export?format=csv"))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+
+        assert_eq!(resp.status(), 200);
+        let disposition = resp
+            .headers()
+            .get("content-disposition")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        // Should not contain < > ( ) '
+        assert!(!disposition.contains('<'));
+        assert!(!disposition.contains('>'));
+        assert!(!disposition.contains('('));
+    }
+
+    // -----------------------------------------------------------------------
+    // Static file handlers
+    // -----------------------------------------------------------------------
+
+    #[actix_web::test]
+    async fn test_static_html() {
+        let resp = index_html().await;
+        assert_eq!(resp.status(), 200);
+        assert!(resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("text/html"));
+    }
+
+    #[actix_web::test]
+    async fn test_static_js() {
+        let resp = app_js().await;
+        assert_eq!(resp.status(), 200);
+        assert!(resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("javascript"));
+    }
+
+    #[actix_web::test]
+    async fn test_static_css() {
+        let resp = style_css().await;
+        assert_eq!(resp.status(), 200);
+        assert!(resp
+            .headers()
+            .get("content-type")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("text/css"));
+    }
 }

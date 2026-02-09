@@ -938,3 +938,228 @@ fn test_json_rejects_invalid_data() {
         .to_string()
         .contains("DBH must be positive"));
 }
+
+// ===========================================================================
+// I/O edge case tests
+// ===========================================================================
+
+#[test]
+fn test_csv_with_utf8_bom() {
+    let csv_content = "\u{FEFF}plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n\
+                        1,1,DF,Douglas Fir,14.0,90.0,0.5,Live,5.0,60,,0.2,15,180,3200";
+    let result = io::read_csv_from_bytes(csv_content.as_bytes(), "bom_test");
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.num_trees(), 1);
+    assert_eq!(inv.plots[0].trees[0].dbh, 14.0);
+}
+
+#[test]
+fn test_csv_with_windows_line_endings() {
+    let csv_content = "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\r\n\
+                        1,1,DF,Douglas Fir,14.0,90.0,0.5,Live,5.0,60,,0.2,15,180,3200\r\n\
+                        1,2,WRC,Western Red Cedar,18.0,100.0,0.4,Live,5.0,80,,0.2,15,180,3200\r\n";
+    let result = io::read_csv_from_bytes(csv_content.as_bytes(), "crlf_test");
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.num_trees(), 2);
+}
+
+#[test]
+fn test_csv_with_quoted_commas_in_species_name() {
+    let csv_content = "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n\
+                        1,1,DF,\"Douglas Fir, var. menziesii\",14.0,90.0,0.5,Live,5.0,60,,0.2,15,180,3200";
+    let result = io::read_csv_from_bytes(csv_content.as_bytes(), "quoted_test");
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(
+        inv.plots[0].trees[0].species.common_name,
+        "Douglas Fir, var. menziesii"
+    );
+}
+
+#[test]
+fn test_csv_with_all_optional_fields_empty() {
+    let csv_content = "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n\
+                        1,1,DF,Douglas Fir,14.0,,,Live,5.0,,,,,,";
+    let result = io::read_csv_from_bytes(csv_content.as_bytes(), "empty_opts");
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    let tree = &inv.plots[0].trees[0];
+    assert_eq!(tree.height, None);
+    assert_eq!(tree.crown_ratio, None);
+    assert_eq!(tree.age, None);
+    assert_eq!(tree.defect, None);
+}
+
+#[test]
+fn test_csv_header_only_no_data() {
+    let csv_content = "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n";
+    let result = io::read_csv_from_bytes(csv_content.as_bytes(), "empty_data");
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.num_plots(), 0);
+    assert_eq!(inv.num_trees(), 0);
+}
+
+#[test]
+fn test_json_with_null_optional_fields() {
+    let json_content = r#"{
+        "name": "null_opts",
+        "plots": [{
+            "plot_id": 1,
+            "plot_size_acres": 0.2,
+            "slope_percent": null,
+            "aspect_degrees": null,
+            "elevation_ft": null,
+            "trees": [{
+                "tree_id": 1,
+                "plot_id": 1,
+                "species": {"code": "DF", "common_name": "Douglas Fir"},
+                "dbh": 14.0,
+                "height": null,
+                "crown_ratio": null,
+                "status": "Live",
+                "expansion_factor": 5.0,
+                "age": null,
+                "defect": null
+            }]
+        }]
+    }"#;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("null_opts.json");
+    std::fs::write(&path, json_content).unwrap();
+
+    let result = io::read_json(&path);
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.plots[0].trees[0].height, None);
+    assert_eq!(inv.plots[0].trees[0].crown_ratio, None);
+    assert_eq!(inv.plots[0].slope_percent, None);
+}
+
+#[test]
+fn test_json_with_extra_fields_ignored() {
+    let json_content = r#"{
+        "name": "extra_fields",
+        "extra_top_level": "should be ignored",
+        "plots": [{
+            "plot_id": 1,
+            "plot_size_acres": 0.2,
+            "slope_percent": null,
+            "aspect_degrees": null,
+            "elevation_ft": null,
+            "custom_field": 42,
+            "trees": [{
+                "tree_id": 1,
+                "plot_id": 1,
+                "species": {"code": "DF", "common_name": "Douglas Fir", "latin": "Pseudotsuga menziesii"},
+                "dbh": 14.0,
+                "height": 90.0,
+                "crown_ratio": 0.5,
+                "status": "Live",
+                "expansion_factor": 5.0,
+                "age": 60,
+                "defect": null,
+                "custom_tree_field": true
+            }]
+        }]
+    }"#;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("extra_fields.json");
+    std::fs::write(&path, json_content).unwrap();
+
+    let result = io::read_json(&path);
+    // serde by default ignores unknown fields, so this should work
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.num_trees(), 1);
+    assert_eq!(inv.plots[0].trees[0].dbh, 14.0);
+}
+
+#[test]
+fn test_json_empty_plots_array() {
+    let json_content = r#"{"name": "empty", "plots": []}"#;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("empty.json");
+    std::fs::write(&path, json_content).unwrap();
+
+    let result = io::read_json(&path);
+    assert!(result.is_ok());
+    let inv = result.unwrap();
+    assert_eq!(inv.num_plots(), 0);
+    assert_eq!(inv.num_trees(), 0);
+}
+
+#[test]
+fn test_json_missing_required_field_fails() {
+    // Missing "dbh" which is required
+    let json_content = r#"{
+        "name": "missing_field",
+        "plots": [{
+            "plot_id": 1,
+            "plot_size_acres": 0.2,
+            "slope_percent": null,
+            "aspect_degrees": null,
+            "elevation_ft": null,
+            "trees": [{
+                "tree_id": 1,
+                "plot_id": 1,
+                "species": {"code": "DF", "common_name": "Douglas Fir"},
+                "height": 90.0,
+                "crown_ratio": 0.5,
+                "status": "Live",
+                "expansion_factor": 5.0,
+                "age": 60,
+                "defect": null
+            }]
+        }]
+    }"#;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("missing.json");
+    std::fs::write(&path, json_content).unwrap();
+
+    let result = io::read_json(&path);
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_csv_roundtrip_preserves_optional_none_values() {
+    let mut inv = ForestInventory::new("OptNone");
+    inv.plots.push(Plot {
+        plot_id: 1,
+        plot_size_acres: 0.2,
+        slope_percent: None,
+        aspect_degrees: None,
+        elevation_ft: None,
+        trees: vec![Tree {
+            tree_id: 1,
+            plot_id: 1,
+            species: Species {
+                common_name: "Douglas Fir".to_string(),
+                code: "DF".to_string(),
+            },
+            dbh: 14.0,
+            height: None,
+            crown_ratio: None,
+            status: TreeStatus::Live,
+            expansion_factor: 5.0,
+            age: None,
+            defect: None,
+        }],
+    });
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("opt_none.csv");
+    io::write_csv(&inv, &path).unwrap();
+    let loaded = io::read_csv(&path).unwrap();
+
+    assert_eq!(loaded.plots[0].trees[0].height, None);
+    assert_eq!(loaded.plots[0].trees[0].crown_ratio, None);
+    assert_eq!(loaded.plots[0].trees[0].age, None);
+    assert_eq!(loaded.plots[0].trees[0].defect, None);
+}

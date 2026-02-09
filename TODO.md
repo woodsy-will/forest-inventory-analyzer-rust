@@ -70,11 +70,11 @@
 
 ## Priority 6: Test Coverage & Robustness
 
-- [ ] **Add web handler integration tests** — `handlers.rs` (500+ lines) has zero tests. Add `actix_web::test` tests for: upload with valid CSV/JSON/Excel, validation error flow (invalid → edit → resubmit), UUID provenance rejection for unknown IDs, export with special characters in filenames, and error responses (404, 400, 422).
+- [x] **Add web handler integration tests** — `handlers.rs` (500+ lines) has zero tests. Add `actix_web::test` tests for: upload with valid CSV/JSON/Excel, validation error flow (invalid → edit → resubmit), UUID provenance rejection for unknown IDs, export with special characters in filenames, and error responses (404, 400, 422).
 
-- [ ] **Add SQLite state unit tests** — `state.rs` has no tests for the new SQLite persistence layer. Test: insert/get/remove round-trips, TTL eviction (insert with past timestamp, verify removal), capacity eviction (exceed `MAX_INVENTORIES`/`MAX_PENDING`, verify oldest removed), and behavior when DB file is missing or corrupted.
+- [x] **Add SQLite state unit tests** — `state.rs` has no tests for the new SQLite persistence layer. Test: insert/get/remove round-trips, TTL eviction (insert with past timestamp, verify removal), capacity eviction (exceed `MAX_INVENTORIES`/`MAX_PENDING`, verify oldest removed), and behavior when DB file is missing or corrupted.
 
-- [ ] **Add I/O edge case tests** — Test: Excel files with 0 data rows, empty cells, and mixed types; CSV with UTF-8 BOM, Windows line endings (`\r\n`), and quoted commas in species names; JSON with extra/missing fields and null optional values.
+- [x] **Add I/O edge case tests** — Test: Excel files with 0 data rows, empty cells, and mixed types; CSV with UTF-8 BOM, Windows line endings (`\r\n`), and quoted commas in species names; JSON with extra/missing fields and null optional values.
 
 ## Priority 7: Error Handling & Resilience
 

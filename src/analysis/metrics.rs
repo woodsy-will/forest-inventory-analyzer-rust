@@ -80,9 +80,7 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
         for tree in plot.live_trees() {
             let entry = species_data
                 .entry(tree.species.code.clone())
-                .or_insert_with(|| {
-                    (tree.species.clone(), 0.0, 0.0, 0.0, 0, 0.0, 0)
-                });
+                .or_insert_with(|| (tree.species.clone(), 0.0, 0.0, 0.0, 0, 0.0, 0));
             entry.1 += tree.expansion_factor; // TPA sum
             entry.2 += tree.basal_area_per_acre(); // BA sum
             entry.3 += tree.dbh * tree.expansion_factor; // weighted DBH sum
@@ -96,37 +94,39 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
 
     let mut species_comp: Vec<SpeciesComposition> = species_data
         .into_values()
-        .map(|(species, tpa_sum, ba_sum, dbh_sum, _count, h_sum, h_count)| {
-            let tpa = tpa_sum / num_plots;
-            let ba = ba_sum / num_plots;
-            let mean_dbh = if tpa_sum > 0.0 {
-                dbh_sum / tpa_sum
-            } else {
-                0.0
-            };
-            let mean_h = if h_count > 0 {
-                Some(h_sum / h_count as f64)
-            } else {
-                None
-            };
-            SpeciesComposition {
-                species,
-                tpa,
-                basal_area: ba,
-                percent_tpa: if total_tpa > 0.0 {
-                    (tpa / total_tpa) * 100.0
+        .map(
+            |(species, tpa_sum, ba_sum, dbh_sum, _count, h_sum, h_count)| {
+                let tpa = tpa_sum / num_plots;
+                let ba = ba_sum / num_plots;
+                let mean_dbh = if tpa_sum > 0.0 {
+                    dbh_sum / tpa_sum
                 } else {
                     0.0
-                },
-                percent_basal_area: if total_ba > 0.0 {
-                    (ba / total_ba) * 100.0
+                };
+                let mean_h = if h_count > 0 {
+                    Some(h_sum / h_count as f64)
                 } else {
-                    0.0
-                },
-                mean_dbh,
-                mean_height: mean_h,
-            }
-        })
+                    None
+                };
+                SpeciesComposition {
+                    species,
+                    tpa,
+                    basal_area: ba,
+                    percent_tpa: if total_tpa > 0.0 {
+                        (tpa / total_tpa) * 100.0
+                    } else {
+                        0.0
+                    },
+                    percent_basal_area: if total_ba > 0.0 {
+                        (ba / total_ba) * 100.0
+                    } else {
+                        0.0
+                    },
+                    mean_dbh,
+                    mean_height: mean_h,
+                }
+            },
+        )
         .collect();
 
     species_comp.sort_by(|a, b| b.basal_area.partial_cmp(&a.basal_area).unwrap());
@@ -155,7 +155,13 @@ mod tests {
         }
     }
 
-    fn make_tree(plot_id: u32, species: Species, dbh: f64, height: Option<f64>, status: TreeStatus) -> Tree {
+    fn make_tree(
+        plot_id: u32,
+        species: Species,
+        dbh: f64,
+        height: Option<f64>,
+        status: TreeStatus,
+    ) -> Tree {
         Tree {
             tree_id: 1,
             plot_id,
@@ -186,15 +192,21 @@ mod tests {
         let wrc = make_species("WRC", "Western Red Cedar");
 
         let mut inv = ForestInventory::new("Metrics Test");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Live),
-            make_tree(1, wrc.clone(), 12.0, Some(80.0), TreeStatus::Live),
-            make_tree(1, df.clone(), 10.0, Some(50.0), TreeStatus::Dead),
-        ]));
-        inv.plots.push(make_plot(2, vec![
-            make_tree(2, df.clone(), 18.0, Some(110.0), TreeStatus::Live),
-            make_tree(2, wrc.clone(), 14.0, Some(90.0), TreeStatus::Live),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![
+                make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Live),
+                make_tree(1, wrc.clone(), 12.0, Some(80.0), TreeStatus::Live),
+                make_tree(1, df.clone(), 10.0, Some(50.0), TreeStatus::Dead),
+            ],
+        ));
+        inv.plots.push(make_plot(
+            2,
+            vec![
+                make_tree(2, df.clone(), 18.0, Some(110.0), TreeStatus::Live),
+                make_tree(2, wrc.clone(), 14.0, Some(90.0), TreeStatus::Live),
+            ],
+        ));
         inv
     }
 
@@ -242,8 +254,16 @@ mod tests {
     fn test_species_percentages_sum_to_100() {
         let inv = sample_inventory();
         let metrics = compute_stand_metrics(&inv);
-        let tpa_pct_sum: f64 = metrics.species_composition.iter().map(|s| s.percent_tpa).sum();
-        let ba_pct_sum: f64 = metrics.species_composition.iter().map(|s| s.percent_basal_area).sum();
+        let tpa_pct_sum: f64 = metrics
+            .species_composition
+            .iter()
+            .map(|s| s.percent_tpa)
+            .sum();
+        let ba_pct_sum: f64 = metrics
+            .species_composition
+            .iter()
+            .map(|s| s.percent_basal_area)
+            .sum();
         assert!((tpa_pct_sum - 100.0).abs() < 0.1);
         assert!((ba_pct_sum - 100.0).abs() < 0.1);
     }
@@ -271,9 +291,10 @@ mod tests {
     fn test_mean_height_none_when_no_heights() {
         let df = make_species("DF", "Douglas Fir");
         let mut inv = ForestInventory::new("No Heights");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, df, 12.0, None, TreeStatus::Live),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![make_tree(1, df, 12.0, None, TreeStatus::Live)],
+        ));
         let metrics = compute_stand_metrics(&inv);
         assert!(metrics.mean_height.is_none());
     }
@@ -310,10 +331,13 @@ mod tests {
     fn test_single_species_inventory() {
         let df = make_species("DF", "Douglas Fir");
         let mut inv = ForestInventory::new("Single Species");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, df.clone(), 14.0, Some(90.0), TreeStatus::Live),
-            make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Live),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![
+                make_tree(1, df.clone(), 14.0, Some(90.0), TreeStatus::Live),
+                make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Live),
+            ],
+        ));
         let metrics = compute_stand_metrics(&inv);
         assert_eq!(metrics.num_species, 1);
         assert!((metrics.species_composition[0].percent_tpa - 100.0).abs() < 0.1);
@@ -324,10 +348,13 @@ mod tests {
     fn test_all_dead_trees_metrics() {
         let df = make_species("DF", "Douglas Fir");
         let mut inv = ForestInventory::new("All Dead");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, df.clone(), 14.0, Some(90.0), TreeStatus::Dead),
-            make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Dead),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![
+                make_tree(1, df.clone(), 14.0, Some(90.0), TreeStatus::Dead),
+                make_tree(1, df.clone(), 16.0, Some(100.0), TreeStatus::Dead),
+            ],
+        ));
         let metrics = compute_stand_metrics(&inv);
         assert_eq!(metrics.total_tpa, 0.0);
         assert_eq!(metrics.total_basal_area, 0.0);

@@ -91,12 +91,9 @@ mod tests {
         let from_analyzer = analyzer.stand_metrics();
         let from_standalone = compute_stand_metrics(&inv);
         assert!((from_analyzer.total_tpa - from_standalone.total_tpa).abs() < 0.001);
+        assert!((from_analyzer.total_basal_area - from_standalone.total_basal_area).abs() < 0.001);
         assert!(
-            (from_analyzer.total_basal_area - from_standalone.total_basal_area).abs() < 0.001
-        );
-        assert!(
-            (from_analyzer.quadratic_mean_diameter - from_standalone.quadratic_mean_diameter)
-                .abs()
+            (from_analyzer.quadratic_mean_diameter - from_standalone.quadratic_mean_diameter).abs()
                 < 0.001
         );
     }
@@ -108,9 +105,7 @@ mod tests {
         let from_analyzer = analyzer.sampling_statistics(0.95).unwrap();
         let from_standalone = SamplingStatistics::compute(&inv, 0.95).unwrap();
         assert!((from_analyzer.tpa.mean - from_standalone.tpa.mean).abs() < 0.001);
-        assert!(
-            (from_analyzer.basal_area.mean - from_standalone.basal_area.mean).abs() < 0.001
-        );
+        assert!((from_analyzer.basal_area.mean - from_standalone.basal_area.mean).abs() < 0.001);
     }
 
     #[test]

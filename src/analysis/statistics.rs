@@ -27,10 +27,7 @@ pub struct SamplingStatistics {
 
 impl SamplingStatistics {
     /// Compute sampling statistics from an inventory at a given confidence level (e.g. 0.95).
-    pub fn compute(
-        inventory: &ForestInventory,
-        confidence: f64,
-    ) -> Result<Self, ForestError> {
+    pub fn compute(inventory: &ForestInventory, confidence: f64) -> Result<Self, ForestError> {
         let n = inventory.num_plots();
         if n < 2 {
             return Err(ForestError::InsufficientData(
@@ -141,10 +138,13 @@ mod tests {
         for i in 1..=num_plots {
             // Vary expansion factor per plot to create between-plot variability
             let ef = 4.0 + i as f64; // 5.0, 6.0, 7.0, ...
-            inv.plots.push(make_plot(i, vec![
-                make_tree_with_ef(i, 12.0 + i as f64, ef),
-                make_tree_with_ef(i, 14.0 + i as f64, ef),
-            ]));
+            inv.plots.push(make_plot(
+                i,
+                vec![
+                    make_tree_with_ef(i, 12.0 + i as f64, ef),
+                    make_tree_with_ef(i, 14.0 + i as f64, ef),
+                ],
+            ));
         }
         inv
     }

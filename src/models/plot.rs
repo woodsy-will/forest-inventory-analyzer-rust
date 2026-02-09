@@ -61,7 +61,10 @@ impl Plot {
         if live.is_empty() {
             return 0.0;
         }
-        let sum_dbh_sq: f64 = live.iter().map(|t| t.dbh.powi(2) * t.expansion_factor).sum();
+        let sum_dbh_sq: f64 = live
+            .iter()
+            .map(|t| t.dbh.powi(2) * t.expansion_factor)
+            .sum();
         let total_tpa: f64 = live.iter().map(|t| t.expansion_factor).sum();
         if total_tpa == 0.0 {
             return 0.0;
@@ -152,9 +155,7 @@ mod tests {
 
     #[test]
     fn test_basal_area_per_acre() {
-        let plot = make_plot(vec![
-            make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
         let expected_ba = std::f64::consts::PI * 36.0 / 144.0 * 5.0;
         assert!((plot.basal_area_per_acre() - expected_ba).abs() < 0.001);
     }
@@ -172,9 +173,7 @@ mod tests {
 
     #[test]
     fn test_volume_cuft_per_acre() {
-        let plot = make_plot(vec![
-            make_tree(1, 16.0, Some(100.0), TreeStatus::Live, 5.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 16.0, Some(100.0), TreeStatus::Live, 5.0)]);
         let vol = plot.volume_cuft_per_acre();
         // V = 0.002454 * 256 * 100 * 5.0 = 314.1
         assert!((vol - 314.1).abs() < 1.0);
@@ -183,26 +182,20 @@ mod tests {
     #[test]
     fn test_volume_cuft_per_acre_no_height() {
         // Trees without height don't contribute to volume
-        let plot = make_plot(vec![
-            make_tree(1, 16.0, None, TreeStatus::Live, 5.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 16.0, None, TreeStatus::Live, 5.0)]);
         assert_eq!(plot.volume_cuft_per_acre(), 0.0);
     }
 
     #[test]
     fn test_volume_bdft_per_acre() {
-        let plot = make_plot(vec![
-            make_tree(1, 16.0, Some(100.0), TreeStatus::Live, 5.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 16.0, Some(100.0), TreeStatus::Live, 5.0)]);
         let vol = plot.volume_bdft_per_acre();
         assert!(vol > 0.0);
     }
 
     #[test]
     fn test_volume_bdft_small_trees_zero() {
-        let plot = make_plot(vec![
-            make_tree(1, 4.0, Some(30.0), TreeStatus::Live, 10.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 4.0, Some(30.0), TreeStatus::Live, 10.0)]);
         assert_eq!(plot.volume_bdft_per_acre(), 0.0);
     }
 
@@ -245,9 +238,7 @@ mod tests {
 
     #[test]
     fn test_plot_json_roundtrip() {
-        let plot = make_plot(vec![
-            make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0),
-        ]);
+        let plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
         let json = serde_json::to_string(&plot).unwrap();
         let deserialized: Plot = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.plot_id, plot.plot_id);

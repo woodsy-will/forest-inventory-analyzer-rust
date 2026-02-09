@@ -125,14 +125,20 @@ mod tests {
         let wrc = make_species("WRC", "Western Red Cedar");
 
         let mut inv = ForestInventory::new("Test");
-        inv.plots.push(make_plot_with_trees(1, vec![
-            make_tree(1, df.clone(), 16.0, TreeStatus::Live),
-            make_tree(1, wrc.clone(), 12.0, TreeStatus::Live),
-        ]));
-        inv.plots.push(make_plot_with_trees(2, vec![
-            make_tree(2, df.clone(), 18.0, TreeStatus::Live),
-            make_tree(2, df.clone(), 8.0, TreeStatus::Dead),
-        ]));
+        inv.plots.push(make_plot_with_trees(
+            1,
+            vec![
+                make_tree(1, df.clone(), 16.0, TreeStatus::Live),
+                make_tree(1, wrc.clone(), 12.0, TreeStatus::Live),
+            ],
+        ));
+        inv.plots.push(make_plot_with_trees(
+            2,
+            vec![
+                make_tree(2, df.clone(), 18.0, TreeStatus::Live),
+                make_tree(2, df.clone(), 8.0, TreeStatus::Dead),
+            ],
+        ));
         inv
     }
 
@@ -277,9 +283,7 @@ mod tests {
     fn test_single_plot_means_equal_plot_values() {
         let df = make_species("DF", "Douglas Fir");
         let mut inv = ForestInventory::new("Single Plot");
-        let plot = make_plot_with_trees(1, vec![
-            make_tree(1, df.clone(), 14.0, TreeStatus::Live),
-        ]);
+        let plot = make_plot_with_trees(1, vec![make_tree(1, df.clone(), 14.0, TreeStatus::Live)]);
         let plot_tpa = plot.trees_per_acre();
         let plot_ba = plot.basal_area_per_acre();
         inv.plots.push(plot);

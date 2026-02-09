@@ -58,10 +58,10 @@
 
 ## Priority 5: Documentation & Polish
 
-- [ ] **Add architecture documentation** — Create a `docs/architecture.md` explaining the 5-layer design (domain, data access, business logic, web, presentation), data flow, and module responsibilities.
+- [x] **Add architecture documentation** — Create a `docs/architecture.md` explaining the 5-layer design (domain, data access, business logic, web, presentation), data flow, and module responsibilities.
 
-- [ ] **Add library usage examples** — Add `examples/` directory with runnable examples showing programmatic use of the library (loading data, running analysis, accessing results).
+- [x] **Add library usage examples** — Add `examples/` directory with runnable examples showing programmatic use of the library (loading data, running analysis, accessing results).
 
-- [ ] **Add CI/CD pipeline** — Set up GitHub Actions workflow for `cargo test`, `cargo clippy`, and `cargo fmt --check` on push/PR to master.
+- [x] **Add CI/CD pipeline** — Set up GitHub Actions workflow for `cargo test`, `cargo clippy`, and `cargo fmt --check` on push/PR to master.
 
-- [ ] **Database-backed persistence** — The in-memory `HashMap` storage for inventories won't scale for concurrent users or server restarts. Consider SQLite or similar for persistence.
+- [x] **Database-backed persistence** — The in-memory `HashMap` storage for inventories won't scale for concurrent users or server restarts. Consider SQLite or similar for persistence.

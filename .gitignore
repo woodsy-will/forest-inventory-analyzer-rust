@@ -18,5 +18,8 @@ Thumbs.db
 .env
 .env.local
 
+# Database
+forest_analyzer.db
+
 # Claude Code
 .claude/

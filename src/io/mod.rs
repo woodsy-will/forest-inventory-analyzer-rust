@@ -1,6 +1,6 @@
 mod csv_io;
-mod json_io;
 mod excel_io;
+mod json_io;
 
 use std::path::Path;
 
@@ -8,12 +8,12 @@ use crate::error::ForestError;
 use crate::models::ForestInventory;
 
 pub use csv_io::{read_csv, read_csv_from_bytes, write_csv};
-pub use json_io::{read_json, read_json_from_bytes, write_json};
 pub use excel_io::{read_excel, read_excel_from_bytes, write_excel};
+pub use json_io::{read_json, read_json_from_bytes, write_json};
 
 pub(crate) use csv_io::{parse_csv_lenient, rows_to_inventory, EditableTreeRow};
-pub(crate) use json_io::parse_json_lenient;
 pub(crate) use excel_io::parse_excel_lenient;
+pub(crate) use json_io::parse_json_lenient;
 
 /// Trait for reading forest inventory data from a file.
 pub trait InventoryReader {
@@ -41,14 +41,9 @@ impl InventoryWriter for CsvFormat {
 }
 
 /// JSON format reader/writer.
+#[derive(Default)]
 pub struct JsonFormat {
     pub pretty: bool,
-}
-
-impl Default for JsonFormat {
-    fn default() -> Self {
-        Self { pretty: false }
-    }
 }
 
 impl InventoryReader for JsonFormat {

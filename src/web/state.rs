@@ -1,95 +1,168 @@
-use std::collections::HashMap;
 use std::sync::Mutex;
-use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use rusqlite::Connection;
 use uuid::Uuid;
 
 use crate::io::EditableTreeRow;
 use crate::models::ForestInventory;
 
-/// Maximum number of entries per map before oldest entries are evicted.
+/// Maximum number of inventories before oldest is evicted.
 const MAX_INVENTORIES: usize = 100;
+/// Maximum number of pending row sets before oldest is evicted.
 const MAX_PENDING: usize = 50;
 /// Time-to-live for pending rows (30 minutes).
 const PENDING_TTL_SECS: u64 = 30 * 60;
 /// Time-to-live for stored inventories (2 hours).
 const INVENTORY_TTL_SECS: u64 = 2 * 60 * 60;
 
+fn unix_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock before UNIX epoch")
+        .as_secs()
+}
+
 pub struct AppState {
-    pub inventories: Mutex<HashMap<Uuid, (Instant, ForestInventory)>>,
-    /// Rows awaiting validation fixes before they can be stored as an inventory.
-    pub pending_rows: Mutex<HashMap<Uuid, (Instant, String, Vec<EditableTreeRow>)>>,
+    db: Mutex<Connection>,
 }
 
 impl AppState {
     pub fn new() -> Self {
+        let conn =
+            Connection::open("forest_analyzer.db").expect("failed to open forest_analyzer.db");
+
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS inventories (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                data TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS pending_rows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                rows TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );",
+        )
+        .expect("failed to create database tables");
+
         Self {
-            inventories: Mutex::new(HashMap::new()),
-            pending_rows: Mutex::new(HashMap::new()),
+            db: Mutex::new(conn),
         }
     }
 
     pub fn get_inventory(&self, id: &Uuid) -> Option<ForestInventory> {
-        let mut map = self.inventories.lock().expect("inventories mutex poisoned");
-        evict_expired_inventories(&mut map);
-        map.get(id).map(|(_, inv)| inv.clone())
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
+
+        let mut stmt = conn
+            .prepare("SELECT data FROM inventories WHERE id = ?1")
+            .expect("failed to prepare inventory select");
+
+        stmt.query_row([id.to_string()], |row| {
+            let json: String = row.get(0)?;
+            Ok(json)
+        })
+        .ok()
+        .and_then(|json| serde_json::from_str(&json).ok())
     }
 
     pub fn insert_inventory(&self, id: Uuid, inventory: ForestInventory) {
-        let mut map = self.inventories.lock().expect("inventories mutex poisoned");
-        evict_expired_inventories(&mut map);
-        if map.len() >= MAX_INVENTORIES {
-            evict_oldest_inventory(&mut map);
-        }
-        map.insert(id, (Instant::now(), inventory));
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
+        evict_if_full(&conn, "inventories", MAX_INVENTORIES);
+
+        let json = serde_json::to_string(&inventory).expect("failed to serialize inventory");
+        conn.execute(
+            "INSERT OR REPLACE INTO inventories (id, name, data, created_at) VALUES (?1, ?2, ?3, ?4)",
+            (id.to_string(), &inventory.name, &json, unix_now()),
+        )
+        .expect("failed to insert inventory");
     }
 
     pub fn get_pending_name(&self, id: &Uuid) -> Option<String> {
-        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
-        evict_expired_pending(&mut map);
-        map.get(id).map(|(_, name, _)| name.clone())
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+
+        let mut stmt = conn
+            .prepare("SELECT name FROM pending_rows WHERE id = ?1")
+            .expect("failed to prepare pending name select");
+
+        stmt.query_row([id.to_string()], |row| row.get(0)).ok()
     }
 
     pub fn has_pending(&self, id: &Uuid) -> bool {
-        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
-        evict_expired_pending(&mut map);
-        map.contains_key(id)
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+
+        let mut stmt = conn
+            .prepare("SELECT EXISTS(SELECT 1 FROM pending_rows WHERE id = ?1)")
+            .expect("failed to prepare pending exists check");
+
+        stmt.query_row([id.to_string()], |row| row.get::<_, bool>(0))
+            .unwrap_or(false)
     }
 
     pub fn insert_pending(&self, id: Uuid, name: String, rows: Vec<EditableTreeRow>) {
-        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
-        evict_expired_pending(&mut map);
-        if map.len() >= MAX_PENDING {
-            evict_oldest_pending(&mut map);
-        }
-        map.insert(id, (Instant::now(), name, rows));
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+        evict_if_full(&conn, "pending_rows", MAX_PENDING);
+
+        let json = serde_json::to_string(&rows).expect("failed to serialize pending rows");
+        conn.execute(
+            "INSERT OR REPLACE INTO pending_rows (id, name, rows, created_at) VALUES (?1, ?2, ?3, ?4)",
+            (id.to_string(), &name, &json, unix_now()),
+        )
+        .expect("failed to insert pending rows");
     }
 
     pub fn remove_pending(&self, id: &Uuid) -> Option<(String, Vec<EditableTreeRow>)> {
-        let mut map = self.pending_rows.lock().expect("pending_rows mutex poisoned");
-        evict_expired_pending(&mut map);
-        map.remove(id).map(|(_, name, rows)| (name, rows))
+        let conn = self.db.lock().expect("db mutex poisoned");
+        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+
+        let mut stmt = conn
+            .prepare("SELECT name, rows FROM pending_rows WHERE id = ?1")
+            .expect("failed to prepare pending select");
+
+        let result = stmt
+            .query_row([id.to_string()], |row| {
+                let name: String = row.get(0)?;
+                let json: String = row.get(1)?;
+                Ok((name, json))
+            })
+            .ok();
+
+        if let Some((name, json)) = result {
+            conn.execute("DELETE FROM pending_rows WHERE id = ?1", [id.to_string()])
+                .expect("failed to delete pending rows");
+            let rows: Vec<EditableTreeRow> =
+                serde_json::from_str(&json).expect("failed to deserialize pending rows");
+            Some((name, rows))
+        } else {
+            None
+        }
     }
 }
 
-fn evict_expired_inventories(map: &mut HashMap<Uuid, (Instant, ForestInventory)>) {
-    let cutoff = Instant::now() - std::time::Duration::from_secs(INVENTORY_TTL_SECS);
-    map.retain(|_, (created, _)| *created > cutoff);
+/// Delete rows older than `ttl_secs` from the given table.
+fn evict_expired(conn: &Connection, table: &str, ttl_secs: u64) {
+    let cutoff = unix_now().saturating_sub(ttl_secs);
+    // Table name is always a compile-time constant from our code, not user input.
+    let sql = format!("DELETE FROM {table} WHERE created_at < ?1");
+    let _ = conn.execute(&sql, [cutoff]);
 }
 
-fn evict_oldest_inventory(map: &mut HashMap<Uuid, (Instant, ForestInventory)>) {
-    if let Some(oldest_id) = map.iter().min_by_key(|(_, (t, _))| *t).map(|(id, _)| *id) {
-        map.remove(&oldest_id);
-    }
-}
+/// If the table has reached `max` entries, delete the oldest one.
+fn evict_if_full(conn: &Connection, table: &str, max: usize) {
+    let sql = format!("SELECT COUNT(*) FROM {table}");
+    let count: usize = conn.query_row(&sql, [], |row| row.get(0)).unwrap_or(0);
 
-fn evict_expired_pending(map: &mut HashMap<Uuid, (Instant, String, Vec<EditableTreeRow>)>) {
-    let cutoff = Instant::now() - std::time::Duration::from_secs(PENDING_TTL_SECS);
-    map.retain(|_, (created, _, _)| *created > cutoff);
-}
-
-fn evict_oldest_pending(map: &mut HashMap<Uuid, (Instant, String, Vec<EditableTreeRow>)>) {
-    if let Some(oldest_id) = map.iter().min_by_key(|(_, (t, _, _))| *t).map(|(id, _)| *id) {
-        map.remove(&oldest_id);
+    if count >= max {
+        let delete_sql = format!(
+            "DELETE FROM {table} WHERE id = (SELECT id FROM {table} ORDER BY created_at ASC LIMIT 1)"
+        );
+        let _ = conn.execute(&delete_sql, []);
     }
 }

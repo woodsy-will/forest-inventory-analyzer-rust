@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::analysis::{Analyzer, GrowthModel};
 use crate::error::ForestError;
-use crate::io::{self, EditableTreeRow, rows_to_inventory};
+use crate::io::{self, rows_to_inventory, EditableTreeRow};
 use crate::models::{Species, Tree, TreeStatus, ValidationIssue};
 
 use super::state::AppState;
@@ -42,15 +42,15 @@ impl actix_web::ResponseError for WebError {
             ForestError::ValidationError(_) | ForestError::ParseError(_) => {
                 (actix_web::http::StatusCode::BAD_REQUEST, "Bad Request")
             }
-            ForestError::NotFound(_) => {
-                (actix_web::http::StatusCode::NOT_FOUND, "Not Found")
-            }
-            ForestError::InsufficientData(_) => {
-                (actix_web::http::StatusCode::UNPROCESSABLE_ENTITY, "Unprocessable Entity")
-            }
-            _ => {
-                (actix_web::http::StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error")
-            }
+            ForestError::NotFound(_) => (actix_web::http::StatusCode::NOT_FOUND, "Not Found"),
+            ForestError::InsufficientData(_) => (
+                actix_web::http::StatusCode::UNPROCESSABLE_ENTITY,
+                "Unprocessable Entity",
+            ),
+            _ => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+            ),
         };
         HttpResponse::build(status).json(ErrorBody {
             error: error_type.to_string(),
@@ -116,7 +116,7 @@ pub async fn upload(
     state: web::Data<AppState>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, WebError> {
-    while let Some(Ok(mut field)) = payload.next().await {
+    if let Some(Ok(mut field)) = payload.next().await {
         let filename = field
             .content_disposition()
             .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
@@ -305,9 +305,9 @@ pub async fn metrics(
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let analyzer = Analyzer::new(&inventory);
     Ok(HttpResponse::Ok().json(analyzer.stand_metrics()))
 }
@@ -323,9 +323,9 @@ pub async fn statistics(
     query: web::Query<StatsQuery>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let confidence = query.confidence.unwrap_or(0.95);
     let analyzer = Analyzer::new(&inventory);
     let stats = analyzer.sampling_statistics(confidence)?;
@@ -343,9 +343,9 @@ pub async fn distribution(
     query: web::Query<DistQuery>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let class_width = query.class_width.unwrap_or(2.0);
     let analyzer = Analyzer::new(&inventory);
     Ok(HttpResponse::Ok().json(analyzer.diameter_distribution(class_width)))
@@ -363,9 +363,9 @@ pub async fn growth(
     body: web::Json<GrowthRequest>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let analyzer = Analyzer::new(&inventory);
     let projections = analyzer.project_growth(&body.model, body.years)?;
     Ok(HttpResponse::Ok().json(projections))
@@ -382,9 +382,9 @@ pub async fn export(
     query: web::Query<ExportQuery>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let fmt = query.format.as_deref().unwrap_or("csv");
 
     match fmt {
@@ -392,17 +392,20 @@ pub async fn export(
             let mut wtr = csv::Writer::from_writer(Vec::new());
             for plot in &inventory.plots {
                 for tree in &plot.trees {
-                    wtr.serialize(&CsvExportRow::from_tree(tree, plot))
+                    wtr.serialize(CsvExportRow::from_tree(tree, plot))
                         .map_err(|e| WebError(ForestError::Csv(e)))?;
                 }
             }
-            let data = wtr.into_inner().map_err(|e| WebError(ForestError::Io(
-                std::io::Error::new(std::io::ErrorKind::Other, e.to_string()),
-            )))?;
+            let data = wtr
+                .into_inner()
+                .map_err(|e| WebError(ForestError::Io(std::io::Error::other(e.to_string()))))?;
             let safe_name = sanitize_filename(&inventory.name);
             Ok(HttpResponse::Ok()
                 .content_type("text/csv")
-                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.csv\"", safe_name)))
+                .insert_header((
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}.csv\"", safe_name),
+                ))
                 .body(data))
         }
         "json" => {
@@ -411,7 +414,10 @@ pub async fn export(
             let safe_name = sanitize_filename(&inventory.name);
             Ok(HttpResponse::Ok()
                 .content_type("application/json")
-                .insert_header(("Content-Disposition", format!("attachment; filename=\"{}.json\"", safe_name)))
+                .insert_header((
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}.json\"", safe_name),
+                ))
                 .body(data))
         }
         _ => Ok(HttpResponse::BadRequest().json(ErrorBody {
@@ -467,9 +473,9 @@ pub async fn inventory_json(
     path: web::Path<Uuid>,
 ) -> Result<HttpResponse, WebError> {
     let id = path.into_inner();
-    let inventory = state.get_inventory(&id).ok_or_else(|| {
-        WebError(ForestError::NotFound(format!("Inventory {id} not found")))
-    })?;
+    let inventory = state
+        .get_inventory(&id)
+        .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     Ok(HttpResponse::Ok().json(inventory))
 }
 

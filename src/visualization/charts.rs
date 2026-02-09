@@ -13,11 +13,7 @@ pub fn format_diameter_histogram(dist: &DiameterDistribution) -> String {
         return output;
     }
 
-    let max_tpa = dist
-        .classes
-        .iter()
-        .map(|c| c.tpa)
-        .fold(0.0f64, f64::max);
+    let max_tpa = dist.classes.iter().map(|c| c.tpa).fold(0.0f64, f64::max);
 
     let bar_width = 40;
 

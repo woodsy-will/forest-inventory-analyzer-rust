@@ -192,7 +192,10 @@ impl Tree {
                 tree_id: self.tree_id,
                 row_index,
                 field: "expansion_factor".to_string(),
-                message: format!("expansion_factor must be positive, got {}", self.expansion_factor),
+                message: format!(
+                    "expansion_factor must be positive, got {}",
+                    self.expansion_factor
+                ),
             });
         }
         if let Some(d) = self.defect {
@@ -248,7 +251,10 @@ mod tests {
         assert_eq!("live".parse::<TreeStatus>().unwrap(), TreeStatus::Live);
         assert_eq!("dead".parse::<TreeStatus>().unwrap(), TreeStatus::Dead);
         assert_eq!("cut".parse::<TreeStatus>().unwrap(), TreeStatus::Cut);
-        assert_eq!("missing".parse::<TreeStatus>().unwrap(), TreeStatus::Missing);
+        assert_eq!(
+            "missing".parse::<TreeStatus>().unwrap(),
+            TreeStatus::Missing
+        );
     }
 
     #[test]
@@ -465,7 +471,12 @@ mod tests {
 
     #[test]
     fn test_tree_status_json_roundtrip() {
-        for status in &[TreeStatus::Live, TreeStatus::Dead, TreeStatus::Cut, TreeStatus::Missing] {
+        for status in &[
+            TreeStatus::Live,
+            TreeStatus::Dead,
+            TreeStatus::Cut,
+            TreeStatus::Missing,
+        ] {
             let json = serde_json::to_string(status).unwrap();
             let deserialized: TreeStatus = serde_json::from_str(&json).unwrap();
             assert_eq!(&deserialized, status);
@@ -556,14 +567,18 @@ mod tests {
     fn test_validate_zero_expansion_factor() {
         let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, 0.0);
         let err = tree.validate().unwrap_err();
-        assert!(err.to_string().contains("expansion_factor must be positive"));
+        assert!(err
+            .to_string()
+            .contains("expansion_factor must be positive"));
     }
 
     #[test]
     fn test_validate_negative_expansion_factor() {
         let tree = make_tree(12.0, Some(80.0), TreeStatus::Live, -1.0);
         let err = tree.validate().unwrap_err();
-        assert!(err.to_string().contains("expansion_factor must be positive"));
+        assert!(err
+            .to_string()
+            .contains("expansion_factor must be positive"));
     }
 
     #[test]

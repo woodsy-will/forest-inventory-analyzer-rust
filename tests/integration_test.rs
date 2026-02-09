@@ -161,8 +161,16 @@ fn test_stand_metrics_species_percentages() {
     let inventory = create_test_inventory();
     let metrics = compute_stand_metrics(&inventory);
 
-    let tpa_sum: f64 = metrics.species_composition.iter().map(|s| s.percent_tpa).sum();
-    let ba_sum: f64 = metrics.species_composition.iter().map(|s| s.percent_basal_area).sum();
+    let tpa_sum: f64 = metrics
+        .species_composition
+        .iter()
+        .map(|s| s.percent_tpa)
+        .sum();
+    let ba_sum: f64 = metrics
+        .species_composition
+        .iter()
+        .map(|s| s.percent_basal_area)
+        .sum();
     assert!((tpa_sum - 100.0).abs() < 0.1);
     assert!((ba_sum - 100.0).abs() < 0.1);
 }
@@ -205,7 +213,12 @@ fn test_sampling_statistics_all_metrics_have_ci() {
     let stats = SamplingStatistics::compute(&inventory, 0.95).unwrap();
 
     // All metrics should have valid confidence intervals
-    for ci in &[&stats.tpa, &stats.basal_area, &stats.volume_cuft, &stats.volume_bdft] {
+    for ci in &[
+        &stats.tpa,
+        &stats.basal_area,
+        &stats.volume_cuft,
+        &stats.volume_bdft,
+    ] {
         assert!(ci.lower <= ci.mean);
         assert!(ci.mean <= ci.upper);
         assert!(ci.std_error >= 0.0);
@@ -298,9 +311,28 @@ fn test_growth_all_models() {
     let inventory = create_test_inventory();
 
     let models = vec![
-        ("exponential", GrowthModel::Exponential { annual_rate: 0.03, mortality_rate: 0.005 }),
-        ("logistic", GrowthModel::Logistic { annual_rate: 0.03, carrying_capacity: 300.0, mortality_rate: 0.005 }),
-        ("linear", GrowthModel::Linear { annual_increment: 2.0, mortality_rate: 0.5 }),
+        (
+            "exponential",
+            GrowthModel::Exponential {
+                annual_rate: 0.03,
+                mortality_rate: 0.005,
+            },
+        ),
+        (
+            "logistic",
+            GrowthModel::Logistic {
+                annual_rate: 0.03,
+                carrying_capacity: 300.0,
+                mortality_rate: 0.005,
+            },
+        ),
+        (
+            "linear",
+            GrowthModel::Linear {
+                annual_increment: 2.0,
+                mortality_rate: 0.5,
+            },
+        ),
     ];
 
     for (name, model) in &models {
@@ -311,9 +343,21 @@ fn test_growth_all_models() {
         // All values should be non-negative
         for p in &projections {
             assert!(p.tpa >= 0.0, "Negative TPA in {name} at year {}", p.year);
-            assert!(p.basal_area >= 0.0, "Negative BA in {name} at year {}", p.year);
-            assert!(p.volume_cuft >= 0.0, "Negative vol cuft in {name} at year {}", p.year);
-            assert!(p.volume_bdft >= 0.0, "Negative vol bdft in {name} at year {}", p.year);
+            assert!(
+                p.basal_area >= 0.0,
+                "Negative BA in {name} at year {}",
+                p.year
+            );
+            assert!(
+                p.volume_cuft >= 0.0,
+                "Negative vol cuft in {name} at year {}",
+                p.year
+            );
+            assert!(
+                p.volume_bdft >= 0.0,
+                "Negative vol bdft in {name} at year {}",
+                p.year
+            );
         }
     }
 }
@@ -321,7 +365,10 @@ fn test_growth_all_models() {
 #[test]
 fn test_growth_empty_inventory_error() {
     let empty = ForestInventory::new("Empty");
-    let model = GrowthModel::Exponential { annual_rate: 0.03, mortality_rate: 0.005 };
+    let model = GrowthModel::Exponential {
+        annual_rate: 0.03,
+        mortality_rate: 0.005,
+    };
     assert!(project_growth(&empty, &model, 10).is_err());
 }
 
@@ -684,13 +731,22 @@ fn test_large_inventory() {
                 tree_id,
                 plot_id,
                 species: Species {
-                    common_name: if tree_id % 3 == 0 { "Western Red Cedar" } else { "Douglas Fir" }.to_string(),
+                    common_name: if tree_id % 3 == 0 {
+                        "Western Red Cedar"
+                    } else {
+                        "Douglas Fir"
+                    }
+                    .to_string(),
                     code: if tree_id % 3 == 0 { "WRC" } else { "DF" }.to_string(),
                 },
                 dbh: 8.0 + (tree_id as f64) * 1.5 + (plot_id as f64) * 0.3,
                 height: Some(50.0 + tree_id as f64 * 5.0 + plot_id as f64 * 2.0),
                 crown_ratio: Some(0.4),
-                status: if tree_id % 10 == 0 { TreeStatus::Dead } else { TreeStatus::Live },
+                status: if tree_id % 10 == 0 {
+                    TreeStatus::Dead
+                } else {
+                    TreeStatus::Live
+                },
                 expansion_factor: 4.0 + plot_id as f64 * 0.1,
                 age: Some(50 + tree_id),
                 defect: None,
@@ -735,12 +791,30 @@ fn test_large_inventory() {
 // ============================================================================
 
 /// Helper to write a CSV with one tree row and attempt to read it back.
-fn write_and_read_csv(dbh: f64, height: &str, crown_ratio: &str, ef: f64, defect: &str) -> Result<ForestInventory, ForestError> {
+fn write_and_read_csv(
+    dbh: f64,
+    height: &str,
+    crown_ratio: &str,
+    ef: f64,
+    defect: &str,
+) -> Result<ForestInventory, ForestError> {
     let dir = tempfile::tempdir().unwrap();
     let csv_path = dir.path().join("invalid.csv");
-    let height_val = if height.is_empty() { "".to_string() } else { height.to_string() };
-    let cr_val = if crown_ratio.is_empty() { "".to_string() } else { crown_ratio.to_string() };
-    let defect_val = if defect.is_empty() { "".to_string() } else { defect.to_string() };
+    let height_val = if height.is_empty() {
+        "".to_string()
+    } else {
+        height.to_string()
+    };
+    let cr_val = if crown_ratio.is_empty() {
+        "".to_string()
+    } else {
+        crown_ratio.to_string()
+    };
+    let defect_val = if defect.is_empty() {
+        "".to_string()
+    } else {
+        defect.to_string()
+    };
     let content = format!(
         "plot_id,tree_id,species_code,species_name,dbh,height,crown_ratio,status,expansion_factor,age,defect,plot_size_acres,slope_percent,aspect_degrees,elevation_ft\n\
          1,1,DF,Douglas Fir,{},{},{},Live,{},60,{},0.2,15,180,3000",
@@ -754,49 +828,70 @@ fn write_and_read_csv(dbh: f64, height: &str, crown_ratio: &str, ef: f64, defect
 fn test_csv_rejects_negative_dbh() {
     let result = write_and_read_csv(-5.0, "80", "0.5", 5.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("DBH must be positive"));
 }
 
 #[test]
 fn test_csv_rejects_zero_dbh() {
     let result = write_and_read_csv(0.0, "80", "0.5", 5.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("DBH must be positive"));
 }
 
 #[test]
 fn test_csv_rejects_negative_height() {
     let result = write_and_read_csv(12.0, "-10", "0.5", 5.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("height must be positive"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("height must be positive"));
 }
 
 #[test]
 fn test_csv_rejects_crown_ratio_above_one() {
     let result = write_and_read_csv(12.0, "80", "1.5", 5.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("crown_ratio must be in 0.0..=1.0"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("crown_ratio must be in 0.0..=1.0"));
 }
 
 #[test]
 fn test_csv_rejects_negative_crown_ratio() {
     let result = write_and_read_csv(12.0, "80", "-0.1", 5.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("crown_ratio must be in 0.0..=1.0"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("crown_ratio must be in 0.0..=1.0"));
 }
 
 #[test]
 fn test_csv_rejects_zero_expansion_factor() {
     let result = write_and_read_csv(12.0, "80", "0.5", 0.0, "");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("expansion_factor must be positive"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("expansion_factor must be positive"));
 }
 
 #[test]
 fn test_csv_rejects_defect_above_one() {
     let result = write_and_read_csv(12.0, "80", "0.5", 5.0, "1.5");
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("defect must be in 0.0..=1.0"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("defect must be in 0.0..=1.0"));
 }
 
 #[test]
@@ -838,5 +933,8 @@ fn test_json_rejects_invalid_data() {
 
     let result = io::read_json(&json_path);
     assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("DBH must be positive"));
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("DBH must be positive"));
 }

@@ -178,10 +178,10 @@ mod tests {
     #[test]
     fn test_all_dead_trees() {
         let mut inv = ForestInventory::new("Dead");
-        inv.plots.push(make_plot(1, vec![
-            make_dead_tree(1, 12.0),
-            make_dead_tree(1, 16.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![make_dead_tree(1, 12.0), make_dead_tree(1, 16.0)],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         assert!(dist.classes.is_empty());
     }
@@ -189,9 +189,7 @@ mod tests {
     #[test]
     fn test_single_tree_single_class() {
         let mut inv = ForestInventory::new("Single");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 13.0, 5.0),
-        ]));
+        inv.plots.push(make_plot(1, vec![make_tree(1, 13.0, 5.0)]));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         assert_eq!(dist.classes.len(), 1);
         assert_eq!(dist.classes[0].tree_count, 1);
@@ -203,12 +201,15 @@ mod tests {
     #[test]
     fn test_class_width_2_inch() {
         let mut inv = ForestInventory::new("Test");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 10.0, 5.0),
-            make_tree(1, 11.0, 5.0),
-            make_tree(1, 14.0, 5.0),
-            make_tree(1, 15.0, 5.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![
+                make_tree(1, 10.0, 5.0),
+                make_tree(1, 11.0, 5.0),
+                make_tree(1, 14.0, 5.0),
+                make_tree(1, 15.0, 5.0),
+            ],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         // 10-12 class: trees at 10" and 11"
         // 14-16 class: trees at 14" and 15"
@@ -220,10 +221,10 @@ mod tests {
     #[test]
     fn test_class_width_1_inch() {
         let mut inv = ForestInventory::new("Test");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 10.0, 5.0),
-            make_tree(1, 11.0, 5.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![make_tree(1, 10.0, 5.0), make_tree(1, 11.0, 5.0)],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 1.0);
         assert_eq!(dist.classes.len(), 2);
     }
@@ -231,9 +232,7 @@ mod tests {
     #[test]
     fn test_midpoint_calculation() {
         let mut inv = ForestInventory::new("Test");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 13.0, 5.0),
-        ]));
+        inv.plots.push(make_plot(1, vec![make_tree(1, 13.0, 5.0)]));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         let class = &dist.classes[0];
         assert!((class.midpoint - (class.lower + class.upper) / 2.0).abs() < 0.001);
@@ -263,10 +262,10 @@ mod tests {
     #[test]
     fn test_excludes_dead_trees() {
         let mut inv = ForestInventory::new("Mix");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 12.0, 5.0),
-            make_dead_tree(1, 16.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![make_tree(1, 12.0, 5.0), make_dead_tree(1, 16.0)],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         // Only the live 12" tree should be in the distribution
         assert_eq!(dist.classes.len(), 1);
@@ -276,12 +275,15 @@ mod tests {
     #[test]
     fn test_wide_range_of_diameters() {
         let mut inv = ForestInventory::new("Wide Range");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 4.0, 10.0),
-            make_tree(1, 12.0, 5.0),
-            make_tree(1, 24.0, 3.0),
-            make_tree(1, 36.0, 1.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![
+                make_tree(1, 4.0, 10.0),
+                make_tree(1, 12.0, 5.0),
+                make_tree(1, 24.0, 3.0),
+                make_tree(1, 36.0, 1.0),
+            ],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         assert!(dist.classes.len() >= 4);
         // Classes should be ordered by diameter
@@ -293,10 +295,10 @@ mod tests {
     #[test]
     fn test_distribution_json_roundtrip() {
         let mut inv = ForestInventory::new("JSON Test");
-        inv.plots.push(make_plot(1, vec![
-            make_tree(1, 12.0, 5.0),
-            make_tree(1, 16.0, 3.0),
-        ]));
+        inv.plots.push(make_plot(
+            1,
+            vec![make_tree(1, 12.0, 5.0), make_tree(1, 16.0, 3.0)],
+        ));
         let dist = DiameterDistribution::from_inventory(&inv, 2.0);
         let json = serde_json::to_string(&dist).unwrap();
         let deserialized: DiameterDistribution = serde_json::from_str(&json).unwrap();

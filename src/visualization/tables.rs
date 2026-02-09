@@ -1,5 +1,7 @@
 use colored::Colorize;
-use comfy_table::{modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, ContentArrangement, Table};
+use comfy_table::{
+    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, ContentArrangement, Table,
+};
 
 use crate::analysis::{GrowthProjection, SamplingStatistics, StandMetrics};
 
@@ -75,13 +77,7 @@ pub fn format_species_table(metrics: &StandMetrics) -> String {
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
-            "Species",
-            "Code",
-            "TPA",
-            "% TPA",
-            "BA/ac",
-            "% BA",
-            "Mean DBH",
+            "Species", "Code", "TPA", "% TPA", "BA/ac", "% BA", "Mean DBH",
         ]);
 
     for sp in &metrics.species_composition {
@@ -172,7 +168,13 @@ pub fn format_growth_table(projections: &[GrowthProjection]) -> String {
         .load_preset(UTF8_FULL)
         .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Year", "TPA", "BA/ac", "Vol (cuft/ac)", "Vol (bdft/ac)"]);
+        .set_header(vec![
+            "Year",
+            "TPA",
+            "BA/ac",
+            "Vol (cuft/ac)",
+            "Vol (bdft/ac)",
+        ]);
 
     for proj in projections {
         table.add_row(vec![

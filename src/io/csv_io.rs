@@ -24,7 +24,9 @@ struct TreeRow {
     elevation_ft: Option<f64>,
 }
 
-fn parse_csv_records<R: Read>(rdr: &mut csv::Reader<R>) -> Result<std::collections::HashMap<u32, Plot>, ForestError> {
+fn parse_csv_records<R: Read>(
+    rdr: &mut csv::Reader<R>,
+) -> Result<std::collections::HashMap<u32, Plot>, ForestError> {
     let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
 
     for result in rdr.deserialize() {
@@ -214,9 +216,8 @@ pub(crate) fn parse_csv_lenient(
 
     let mut rows = Vec::new();
     let mut issues = Vec::new();
-    let mut row_index: usize = 0;
 
-    for result in rdr.deserialize() {
+    for (row_index, result) in rdr.deserialize().enumerate() {
         let csv_row: TreeRow = result?;
 
         // Try to parse status; default to "Live" on error and record issue
@@ -272,8 +273,6 @@ pub(crate) fn parse_csv_lenient(
             aspect_degrees: csv_row.aspect_degrees,
             elevation_ft: csv_row.elevation_ft,
         });
-
-        row_index += 1;
     }
 
     Ok((name.to_string(), rows, issues))

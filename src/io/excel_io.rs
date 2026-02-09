@@ -39,21 +39,13 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
             continue;
         }
 
-        let get_f64 = |idx: usize| -> f64 {
-            row.get(idx)
-                .and_then(|c| c.get_float())
-                .unwrap_or(0.0)
-        };
+        let get_f64 =
+            |idx: usize| -> f64 { row.get(idx).and_then(|c| c.get_float()).unwrap_or(0.0) };
 
-        let get_opt_f64 = |idx: usize| -> Option<f64> {
-            row.get(idx).and_then(|c| c.get_float())
-        };
+        let get_opt_f64 = |idx: usize| -> Option<f64> { row.get(idx).and_then(|c| c.get_float()) };
 
-        let get_string = |idx: usize| -> String {
-            row.get(idx)
-                .map(|c| c.to_string())
-                .unwrap_or_default()
-        };
+        let get_string =
+            |idx: usize| -> String { row.get(idx).map(|c| c.to_string()).unwrap_or_default() };
 
         let plot_id = get_f64(0) as u32;
         let tree_id = get_f64(1) as u32;
@@ -114,10 +106,7 @@ pub fn read_excel_from_bytes(data: &[u8], name: &str) -> Result<ForestInventory,
 }
 
 /// Write forest inventory data to an Excel (.xlsx) file.
-pub fn write_excel(
-    inventory: &ForestInventory,
-    path: impl AsRef<Path>,
-) -> Result<(), ForestError> {
+pub fn write_excel(inventory: &ForestInventory, path: impl AsRef<Path>) -> Result<(), ForestError> {
     let mut workbook = Workbook::new();
     let worksheet = workbook.add_worksheet();
 
@@ -267,21 +256,13 @@ pub(crate) fn parse_excel_lenient(
             continue;
         }
 
-        let get_f64 = |idx: usize| -> f64 {
-            row.get(idx)
-                .and_then(|c| c.get_float())
-                .unwrap_or(0.0)
-        };
+        let get_f64 =
+            |idx: usize| -> f64 { row.get(idx).and_then(|c| c.get_float()).unwrap_or(0.0) };
 
-        let get_opt_f64 = |idx: usize| -> Option<f64> {
-            row.get(idx).and_then(|c| c.get_float())
-        };
+        let get_opt_f64 = |idx: usize| -> Option<f64> { row.get(idx).and_then(|c| c.get_float()) };
 
-        let get_string = |idx: usize| -> String {
-            row.get(idx)
-                .map(|c| c.to_string())
-                .unwrap_or_default()
-        };
+        let get_string =
+            |idx: usize| -> String { row.get(idx).map(|c| c.to_string()).unwrap_or_default() };
 
         let plot_id = get_f64(0) as u32;
         let tree_id = get_f64(1) as u32;

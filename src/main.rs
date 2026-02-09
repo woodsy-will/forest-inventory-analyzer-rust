@@ -9,6 +9,7 @@ use forest_inventory_analyzer::{
         compute_stand_metrics, project_growth, DiameterDistribution, GrowthModel,
         SamplingStatistics,
     },
+    config::AppConfig,
     io,
     visualization::{
         print_diameter_histogram, print_growth_table, print_species_table, print_stand_summary,
@@ -24,6 +25,10 @@ use forest_inventory_analyzer::{
     author
 )]
 struct Cli {
+    /// Path to configuration file (default: config.toml)
+    #[arg(long, global = true, default_value = "config.toml")]
+    config: PathBuf,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -95,6 +100,21 @@ enum Commands {
         pretty: bool,
     },
 
+    /// Analyze multiple inventory files in a directory
+    AnalyzeBatch {
+        /// Directory containing inventory files (CSV, JSON, or Excel)
+        #[arg(long)]
+        input_dir: PathBuf,
+
+        /// Directory for output JSON reports
+        #[arg(long)]
+        output_dir: PathBuf,
+
+        /// Confidence level for statistical analysis (0.0-1.0)
+        #[arg(short, long, default_value = "0.95")]
+        confidence: f64,
+    },
+
     /// Display a quick summary of the inventory
     Summary {
         /// Path to input file
@@ -129,6 +149,7 @@ fn load_inventory(path: &PathBuf) -> Result<forest_inventory_analyzer::models::F
 fn main() -> Result<()> {
     env_logger::init();
     let cli = Cli::parse();
+    let _config = AppConfig::load(&cli.config)?;
 
     match cli.command {
         Commands::Analyze {
@@ -229,7 +250,8 @@ fn main() -> Result<()> {
                 "csv" => io::write_csv(&inventory, &output)?,
                 "json" => io::write_json(&inventory, &output, pretty)?,
                 "xlsx" => io::write_excel(&inventory, &output)?,
-                _ => anyhow::bail!("Unsupported output format: .{out_ext}"),
+                "geojson" => io::write_geojson(&inventory, &output, pretty)?,
+                _ => anyhow::bail!("Unsupported output format: .{out_ext}. Use .csv, .json, .xlsx, or .geojson"),
             }
 
             println!(
@@ -237,6 +259,101 @@ fn main() -> Result<()> {
                 "Success:".green().bold(),
                 input.display(),
                 output.display()
+            );
+        }
+
+        Commands::AnalyzeBatch {
+            input_dir,
+            output_dir,
+            confidence,
+        } => {
+            if !input_dir.is_dir() {
+                anyhow::bail!("Input path is not a directory: {}", input_dir.display());
+            }
+            std::fs::create_dir_all(&output_dir)?;
+
+            let supported_exts = ["csv", "json", "xlsx", "xls"];
+            let mut files: Vec<PathBuf> = std::fs::read_dir(&input_dir)?
+                .filter_map(|entry| entry.ok())
+                .map(|entry| entry.path())
+                .filter(|p| {
+                    p.extension()
+                        .and_then(|e| e.to_str())
+                        .map(|e| supported_exts.contains(&e.to_lowercase().as_str()))
+                        .unwrap_or(false)
+                })
+                .collect();
+            files.sort();
+
+            if files.is_empty() {
+                anyhow::bail!(
+                    "No inventory files (.csv, .json, .xlsx) found in {}",
+                    input_dir.display()
+                );
+            }
+
+            println!(
+                "\n{}",
+                format!("Batch Analysis: {} files", files.len())
+                    .bold()
+                    .cyan()
+            );
+
+            let mut processed = 0;
+            let mut failed = 0;
+
+            for file in &files {
+                let name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+                match load_inventory(file) {
+                    Ok(inventory) => {
+                        let metrics = compute_stand_metrics(&inventory);
+                        let stats = SamplingStatistics::compute(&inventory, confidence).ok();
+
+                        let report = serde_json::json!({
+                            "file": file.file_name().and_then(|f| f.to_str()),
+                            "name": inventory.name,
+                            "num_plots": inventory.num_plots(),
+                            "num_trees": inventory.num_trees(),
+                            "species_count": inventory.species_list().len(),
+                            "mean_tpa": inventory.mean_tpa(),
+                            "mean_basal_area": inventory.mean_basal_area(),
+                            "mean_volume_cuft": inventory.mean_volume_cuft(),
+                            "mean_volume_bdft": inventory.mean_volume_bdft(),
+                            "species_composition": metrics.species_composition.iter().map(|sc| {
+                                serde_json::json!({
+                                    "species": sc.species.code,
+                                    "tpa": sc.tpa,
+                                    "basal_area": sc.basal_area,
+                                    "pct_ba": sc.percent_basal_area,
+                                })
+                            }).collect::<Vec<_>>(),
+                            "statistics": stats.map(|s| serde_json::json!({
+                                "confidence_level": s.tpa.confidence_level,
+                                "tpa_mean": s.tpa.mean,
+                                "tpa_std_error": s.tpa.std_error,
+                                "ba_mean": s.basal_area.mean,
+                                "ba_std_error": s.basal_area.std_error,
+                            })),
+                        });
+
+                        let out_path = output_dir.join(format!("{name}.json"));
+                        let content = serde_json::to_string_pretty(&report)?;
+                        std::fs::write(&out_path, content)?;
+
+                        println!("  {} {}", "OK".green(), file.display());
+                        processed += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("  {} {} — {e}", "FAIL".red(), file.display());
+                        failed += 1;
+                    }
+                }
+            }
+
+            println!(
+                "\n{} Processed {processed} files, {failed} failed. Reports in {}",
+                "Done.".green().bold(),
+                output_dir.display()
             );
         }
 

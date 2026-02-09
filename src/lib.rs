@@ -1,4 +1,5 @@
 pub mod analysis;
+pub mod config;
 pub mod error;
 pub mod io;
 pub mod models;
@@ -11,8 +12,9 @@ pub use analysis::{
     Analyzer, ConfidenceInterval, DiameterClass, DiameterDistribution, GrowthModel,
     GrowthProjection, SamplingStatistics, SpeciesComposition, StandMetrics,
 };
+pub use config::AppConfig;
 pub use error::ForestError;
-pub use io::{InventoryReader, InventoryWriter};
+pub use io::{GeoJsonFormat, InventoryReader, InventoryWriter};
 pub use models::{
     ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue, VolumeEquation,
 };

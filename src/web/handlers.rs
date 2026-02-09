@@ -420,9 +420,22 @@ pub async fn export(
                 ))
                 .body(data))
         }
+        "geojson" => {
+            let collection = build_geojson(&inventory);
+            let data = serde_json::to_string_pretty(&collection)
+                .map_err(|e| WebError(ForestError::Json(e)))?;
+            let safe_name = sanitize_filename(&inventory.name);
+            Ok(HttpResponse::Ok()
+                .content_type("application/geo+json")
+                .insert_header((
+                    "Content-Disposition",
+                    format!("attachment; filename=\"{}.geojson\"", safe_name),
+                ))
+                .body(data))
+        }
         _ => Ok(HttpResponse::BadRequest().json(ErrorBody {
             error: "Bad Request".to_string(),
-            details: format!("Unsupported export format: {fmt}. Use csv or json."),
+            details: format!("Unsupported export format: {fmt}. Use csv, json, or geojson."),
         })),
     }
 }
@@ -466,6 +479,51 @@ impl CsvExportRow {
             elevation_ft: plot.elevation_ft,
         }
     }
+}
+
+fn build_geojson(inventory: &crate::models::ForestInventory) -> serde_json::Value {
+    let features: Vec<serde_json::Value> = inventory
+        .plots
+        .iter()
+        .map(|plot| {
+            let trees: Vec<serde_json::Value> = plot
+                .trees
+                .iter()
+                .map(|t| {
+                    serde_json::json!({
+                        "tree_id": t.tree_id,
+                        "species_code": t.species.code,
+                        "species_name": t.species.common_name,
+                        "dbh": t.dbh,
+                        "height": t.height,
+                        "crown_ratio": t.crown_ratio,
+                        "status": format!("{:?}", t.status),
+                        "expansion_factor": t.expansion_factor,
+                    })
+                })
+                .collect();
+            serde_json::json!({
+                "type": "Feature",
+                "geometry": serde_json::Value::Null,
+                "properties": {
+                    "plot_id": plot.plot_id,
+                    "plot_size_acres": plot.plot_size_acres,
+                    "slope_percent": plot.slope_percent,
+                    "aspect_degrees": plot.aspect_degrees,
+                    "elevation_ft": plot.elevation_ft,
+                    "trees_per_acre": plot.trees_per_acre(),
+                    "basal_area_per_acre": plot.basal_area_per_acre(),
+                    "num_trees": plot.trees.len(),
+                    "trees": trees,
+                }
+            })
+        })
+        .collect();
+
+    serde_json::json!({
+        "type": "FeatureCollection",
+        "features": features,
+    })
 }
 
 pub async fn inventory_json(

@@ -96,10 +96,10 @@
 
 ## Priority 9: Features & Performance
 
-- [ ] **Add batch processing CLI command** — Currently the CLI processes one file at a time. Add `analyze-batch --input-dir ./inventories/ --output-dir ./reports/` to process multiple inventory files and optionally produce aggregated cross-inventory statistics.
+- [x] **Add batch processing CLI command** — Currently the CLI processes one file at a time. Add `analyze-batch --input-dir ./inventories/ --output-dir ./reports/` to process multiple inventory files and optionally produce aggregated cross-inventory statistics.
 
-- [ ] **Add GeoJSON export** — Plots have elevation, aspect, and slope attributes but no geospatial export. Add `GeoJsonFormat` implementing `InventoryWriter`, and add `format=geojson` to the web export endpoint. Use the `geojson` crate.
+- [x] **Add GeoJSON export** — Plots have elevation, aspect, and slope attributes but no geospatial export. Add `GeoJsonFormat` implementing `InventoryWriter`, and add `format=geojson` to the web export endpoint. Use the `geojson` crate.
 
-- [ ] **Optimize species_list deduplication** — `ForestInventory::species_list()` in `inventory.rs` collects all species into a Vec, sorts, and deduplicates. Use a `HashSet` or `IndexSet` for O(n) dedup instead of O(n log n) sort+dedup, which matters on inventories with 1000+ trees.
+- [x] **Optimize species_list deduplication** — `ForestInventory::species_list()` in `inventory.rs` collects all species into a Vec, sorts, and deduplicates. Use a `HashSet` or `IndexSet` for O(n) dedup instead of O(n log n) sort+dedup, which matters on inventories with 1000+ trees.
 
-- [ ] **Add configuration file support** — All settings (DB path, upload size limit, default growth model params, server port) are hardcoded or CLI-only. Add optional `config.toml` support via the `config` crate so deployment-specific settings persist without CLI flags.
+- [x] **Add configuration file support** — All settings (DB path, upload size limit, default growth model params, server port) are hardcoded or CLI-only. Add optional `config.toml` support via the `config` crate so deployment-specific settings persist without CLI flags.

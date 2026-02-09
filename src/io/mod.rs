@@ -1,5 +1,6 @@
 mod csv_io;
 mod excel_io;
+mod geojson_io;
 mod json_io;
 
 use std::path::Path;
@@ -9,6 +10,7 @@ use crate::models::ForestInventory;
 
 pub use csv_io::{read_csv, read_csv_from_bytes, write_csv};
 pub use excel_io::{read_excel, read_excel_from_bytes, write_excel};
+pub use geojson_io::write_geojson;
 pub use json_io::{read_json, read_json_from_bytes, write_json};
 
 pub(crate) use csv_io::{parse_csv_lenient, rows_to_inventory, EditableTreeRow};
@@ -55,6 +57,18 @@ impl InventoryReader for JsonFormat {
 impl InventoryWriter for JsonFormat {
     fn write(&self, inventory: &ForestInventory, path: &Path) -> Result<(), ForestError> {
         write_json(inventory, path, self.pretty)
+    }
+}
+
+/// GeoJSON format writer (export only).
+#[derive(Default)]
+pub struct GeoJsonFormat {
+    pub pretty: bool,
+}
+
+impl InventoryWriter for GeoJsonFormat {
+    fn write(&self, inventory: &ForestInventory, path: &Path) -> Result<(), ForestError> {
+        write_geojson(inventory, path, self.pretty)
     }
 }
 

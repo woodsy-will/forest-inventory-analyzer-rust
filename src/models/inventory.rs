@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 
 use super::{Plot, Species};
@@ -24,14 +26,19 @@ impl ForestInventory {
     }
 
     /// Get all unique species across the inventory.
+    ///
+    /// Uses `HashSet` for O(n) deduplication instead of O(n log n) sort+dedup,
+    /// which matters on inventories with 1000+ trees.
     pub fn species_list(&self) -> Vec<Species> {
+        let mut seen = HashSet::new();
         let mut species: Vec<Species> = self
             .plots
             .iter()
-            .flat_map(|p| p.trees.iter().map(|t| t.species.clone()))
+            .flat_map(|p| p.trees.iter())
+            .filter(|t| seen.insert(t.species.code.clone()))
+            .map(|t| t.species.clone())
             .collect();
         species.sort_by(|a, b| a.code.cmp(&b.code));
-        species.dedup_by(|a, b| a.code == b.code);
         species
     }
 

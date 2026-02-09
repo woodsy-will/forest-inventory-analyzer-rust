@@ -46,6 +46,9 @@ colored = "2"
 log = "0.4"
 env_logger = "0.11"
 
+# Configuration
+toml = "0.8"
+
 # Temp files (needed for Excel byte parsing)
 tempfile = "3"
 

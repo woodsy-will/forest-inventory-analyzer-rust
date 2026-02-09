@@ -26,12 +26,52 @@ impl Plot {
     }
 
     /// Calculate trees per acre for this plot.
+    ///
+    /// Sums the expansion factors of all live trees.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{Plot, Tree, Species, TreeStatus};
+    ///
+    /// let plot = Plot {
+    ///     plot_id: 1, plot_size_acres: 0.2,
+    ///     slope_percent: None, aspect_degrees: None, elevation_ft: None,
+    ///     trees: vec![
+    ///         Tree {
+    ///             tree_id: 1, plot_id: 1,
+    ///             species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///             dbh: 14.0, height: Some(90.0), crown_ratio: None,
+    ///             status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    ///         },
+    ///     ],
+    /// };
+    /// assert!((plot.trees_per_acre() - 5.0).abs() < 0.001);
+    /// ```
     pub fn trees_per_acre(&self) -> f64 {
         let live_count: f64 = self.live_trees().iter().map(|t| t.expansion_factor).sum();
         live_count
     }
 
-    /// Calculate basal area per acre for this plot.
+    /// Calculate basal area per acre for this plot (sq ft/acre).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{Plot, Tree, Species, TreeStatus};
+    ///
+    /// let plot = Plot {
+    ///     plot_id: 1, plot_size_acres: 0.2,
+    ///     slope_percent: None, aspect_degrees: None, elevation_ft: None,
+    ///     trees: vec![Tree {
+    ///         tree_id: 1, plot_id: 1,
+    ///         species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///         dbh: 12.0, height: Some(80.0), crown_ratio: None,
+    ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    ///     }],
+    /// };
+    /// assert!(plot.basal_area_per_acre() > 0.0);
+    /// ```
     pub fn basal_area_per_acre(&self) -> f64 {
         self.live_trees()
             .iter()

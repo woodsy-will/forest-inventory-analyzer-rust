@@ -1,8 +1,8 @@
 # Forest Inventory Analyzer
 
-[![CI](https://github.com/YOUR_USERNAME/forest_inventory_analyzer_rust/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_USERNAME/forest_inventory_analyzer_rust/actions/workflows/ci.yml)
+[![CI](https://github.com/woodsy-will/forest-inventory-analyzer-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/woodsy-will/forest-inventory-analyzer-rust/actions/workflows/ci.yml)
 
-A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON, and Excel formats with statistical analysis, growth projections, and text-based visualization.
+A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON, and Excel formats with statistical analysis, growth projections, text-based visualization, and an optional web UI.
 
 ## Features
 
@@ -10,16 +10,18 @@ A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON
 - **Species Composition** - Breakdown by species with percentage of TPA and basal area
 - **Statistical Analysis** - Confidence intervals, sampling error, standard error using Student's t-distribution
 - **Diameter Distribution** - Text-based histogram of diameter classes
-- **Growth Projections** - Exponential, logistic, and linear growth models
+- **Growth Projections** - Exponential, logistic, and linear growth models with configurable mortality
 - **Multi-Format I/O** - Read/write CSV, JSON, and Excel (.xlsx) files
 - **Format Conversion** - Convert between any supported formats
+- **Web UI** - Browser-based dashboard with file upload, interactive charts, data editing, and export
+- **SQLite Persistence** - Server-side inventory storage with TTL-based eviction
 
 ## Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/forest_inventory_analyzer_rust.git
-cd forest_inventory_analyzer_rust
+git clone https://github.com/woodsy-will/forest-inventory-analyzer-rust.git
+cd forest-inventory-analyzer-rust
 
 # Build
 cargo build --release
@@ -71,6 +73,37 @@ forest-analyzer convert --input inventory.xlsx --output inventory.csv
 forest-analyzer summary --input inventory.csv
 ```
 
+### Web UI
+
+```bash
+# Start the web server (default port 8080)
+forest-analyzer serve
+
+# Custom port
+forest-analyzer serve --port 3000
+```
+
+Then open `http://localhost:8080` in your browser. The web UI supports:
+- Uploading CSV, JSON, and Excel files
+- In-browser data editing with validation
+- Interactive stand metrics, statistics, and growth charts
+- Exporting results in CSV or JSON format
+
+## Examples
+
+Runnable examples are provided in the `examples/` directory:
+
+```bash
+# Basic analysis — load CSV, compute metrics, display tables and histogram
+cargo run --example basic_analysis
+
+# Growth projection — logistic and exponential models over 20 years
+cargo run --example growth_projection
+
+# Format conversion — CSV to JSON and Excel with round-trip verification
+cargo run --example format_conversion
+```
+
 ## CSV Format
 
 The expected CSV format includes these columns:
@@ -97,22 +130,25 @@ The expected CSV format includes these columns:
 
 ```rust
 use forest_inventory_analyzer::{
-    io,
-    analysis::{compute_stand_metrics, SamplingStatistics, DiameterDistribution},
+    Analyzer, ForestInventory, Tree, Plot, Species, TreeStatus,
+    GrowthModel, StandMetrics, SamplingStatistics,
+    io::{CsvFormat, InventoryReader},
 };
 
 fn main() -> anyhow::Result<()> {
     // Load data
-    let inventory = io::read_csv("inventory.csv")?;
+    let inventory = CsvFormat.read("inventory.csv")?;
 
-    // Compute metrics
-    let metrics = compute_stand_metrics(&inventory);
+    // Compute metrics via the Analyzer
+    let analyzer = Analyzer::new(&inventory);
+    let metrics = analyzer.stand_metrics();
     println!("TPA: {:.1}", metrics.total_tpa);
     println!("Basal Area: {:.1} sq ft/ac", metrics.total_basal_area);
 
     // Statistical analysis
-    let stats = SamplingStatistics::compute(&inventory, 0.95)?;
-    println!("BA 95% CI: {:.1} - {:.1}", stats.basal_area.lower, stats.basal_area.upper);
+    let stats = analyzer.sampling_statistics(0.95)?;
+    println!("BA 95% CI: {:.1} - {:.1}",
+        stats.basal_area.lower, stats.basal_area.upper);
 
     Ok(())
 }
@@ -122,7 +158,7 @@ fn main() -> anyhow::Result<()> {
 
 ```bash
 # Run tests
-cargo test
+cargo test --all-features
 
 # Run clippy
 cargo clippy --all-features

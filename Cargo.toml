@@ -7,6 +7,10 @@ license = "MIT"
 readme = "README.md"
 keywords = ["forestry", "inventory", "analysis", "statistics", "ecology"]
 categories = ["science", "command-line-utilities"]
+repository = "https://github.com/woodsy-will/forest-inventory-analyzer-rust"
+homepage = "https://github.com/woodsy-will/forest-inventory-analyzer-rust"
+documentation = "https://docs.rs/forest_inventory_analyzer"
+exclude = [".github/", ".claude/", "data/", "forest_analyzer.db"]
 
 [lib]
 name = "forest_inventory_analyzer"

@@ -46,6 +46,25 @@ impl ForestInventory {
     }
 
     /// Mean trees per acre across all plots.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{ForestInventory, Plot, Tree, Species, TreeStatus};
+    ///
+    /// let mut inv = ForestInventory::new("Example");
+    /// inv.plots.push(Plot {
+    ///     plot_id: 1, plot_size_acres: 0.2,
+    ///     slope_percent: None, aspect_degrees: None, elevation_ft: None,
+    ///     trees: vec![Tree {
+    ///         tree_id: 1, plot_id: 1,
+    ///         species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///         dbh: 14.0, height: Some(90.0), crown_ratio: None,
+    ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    ///     }],
+    /// });
+    /// assert!((inv.mean_tpa() - 5.0).abs() < 0.001);
+    /// ```
     pub fn mean_tpa(&self) -> f64 {
         if self.plots.is_empty() {
             return 0.0;
@@ -54,7 +73,26 @@ impl ForestInventory {
         sum / self.plots.len() as f64
     }
 
-    /// Mean basal area per acre across all plots.
+    /// Mean basal area per acre across all plots (sq ft/acre).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{ForestInventory, Plot, Tree, Species, TreeStatus};
+    ///
+    /// let mut inv = ForestInventory::new("Example");
+    /// inv.plots.push(Plot {
+    ///     plot_id: 1, plot_size_acres: 0.2,
+    ///     slope_percent: None, aspect_degrees: None, elevation_ft: None,
+    ///     trees: vec![Tree {
+    ///         tree_id: 1, plot_id: 1,
+    ///         species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///         dbh: 14.0, height: Some(90.0), crown_ratio: None,
+    ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    ///     }],
+    /// });
+    /// assert!(inv.mean_basal_area() > 0.0);
+    /// ```
     pub fn mean_basal_area(&self) -> f64 {
         if self.plots.is_empty() {
             return 0.0;

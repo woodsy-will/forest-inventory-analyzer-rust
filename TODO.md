@@ -86,13 +86,13 @@
 
 ## Priority 8: Publishing & Developer Experience
 
-- [ ] **Fix README placeholders** — `README.md` lines 3 and 21 contain `YOUR_USERNAME`. Replace with actual GitHub username. Add a section documenting the `examples/` directory and `cargo run --example` commands. Mention the web UI feature and `cargo run -- serve`.
+- [x] **Fix README placeholders** — `README.md` lines 3 and 21 contain `YOUR_USERNAME`. Replace with actual GitHub username. Add a section documenting the `examples/` directory and `cargo run --example` commands. Mention the web UI feature and `cargo run -- serve`.
 
-- [ ] **Add Cargo.toml publishing metadata** — Missing `repository`, `documentation`, and `homepage` fields needed for crates.io. Add `exclude` to keep `.github/`, `.claude/`, and test fixtures out of the published crate.
+- [x] **Add Cargo.toml publishing metadata** — Missing `repository`, `documentation`, and `homepage` fields needed for crates.io. Add `exclude` to keep `.github/`, `.claude/`, and test fixtures out of the published crate.
 
-- [ ] **Expand library re-exports** — `lib.rs` re-exports `Analyzer` but not `GrowthModel`, `DiameterDistribution`, `StandMetrics`, `SamplingStatistics`, `GrowthProjection`, or `ConfidenceInterval`. Add these so users don't need to reach into submodules for common types.
+- [x] **Expand library re-exports** — `lib.rs` re-exports `Analyzer` but not `GrowthModel`, `DiameterDistribution`, `StandMetrics`, `SamplingStatistics`, `GrowthProjection`, or `ConfidenceInterval`. Add these so users don't need to reach into submodules for common types.
 
-- [ ] **Add doc comments with examples to public API** — Public methods like `Tree::basal_area_sqft`, `Tree::volume_cuft`, `Plot::trees_per_acre`, and `ForestInventory::mean_tpa` lack doc-test examples. Add `/// # Examples` blocks so `cargo doc` and docs.rs show usage inline.
+- [x] **Add doc comments with examples to public API** — Public methods like `Tree::basal_area_sqft`, `Tree::volume_cuft`, `Plot::trees_per_acre`, and `ForestInventory::mean_tpa` lack doc-test examples. Add `/// # Examples` blocks so `cargo doc` and docs.rs show usage inline.
 
 ## Priority 9: Features & Performance
 

@@ -90,6 +90,23 @@ pub struct Tree {
 
 impl Tree {
     /// Calculate basal area in square feet for this tree.
+    ///
+    /// Uses the formula: BA = pi * (DBH/2)^2 / 144
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{Tree, Species, TreeStatus};
+    ///
+    /// let tree = Tree {
+    ///     tree_id: 1, plot_id: 1,
+    ///     species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///     dbh: 12.0, height: Some(80.0), crown_ratio: Some(0.5),
+    ///     status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    /// };
+    /// let ba = tree.basal_area_sqft();
+    /// assert!((ba - 0.7854).abs() < 0.001);
+    /// ```
     pub fn basal_area_sqft(&self) -> f64 {
         std::f64::consts::PI * (self.dbh / 2.0).powi(2) / 144.0
     }
@@ -101,6 +118,27 @@ impl Tree {
 
     /// Estimate cubic foot volume using the combined variable equation.
     /// Uses a simplified form of the National Volume Estimator approach.
+    ///
+    /// Returns `None` if height is not available.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{Tree, Species, TreeStatus};
+    ///
+    /// let tree = Tree {
+    ///     tree_id: 1, plot_id: 1,
+    ///     species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///     dbh: 16.0, height: Some(100.0), crown_ratio: None,
+    ///     status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    /// };
+    /// let vol = tree.volume_cuft().unwrap();
+    /// assert!((vol - 62.82).abs() < 0.1);
+    ///
+    /// // No height -> None
+    /// let tree_no_ht = Tree { height: None, ..tree };
+    /// assert!(tree_no_ht.volume_cuft().is_none());
+    /// ```
     pub fn volume_cuft(&self) -> Option<f64> {
         self.volume_cuft_with(&VolumeEquation::default())
     }
@@ -117,6 +155,28 @@ impl Tree {
     }
 
     /// Estimate board foot volume (Scribner) using a simplified equation.
+    ///
+    /// Trees below the merchantable DBH threshold (default 6") return 0.
+    /// Returns `None` if height is not available.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use forest_inventory_analyzer::{Tree, Species, TreeStatus};
+    ///
+    /// let tree = Tree {
+    ///     tree_id: 1, plot_id: 1,
+    ///     species: Species { common_name: "Douglas Fir".into(), code: "DF".into() },
+    ///     dbh: 16.0, height: Some(100.0), crown_ratio: None,
+    ///     status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
+    /// };
+    /// let vol = tree.volume_bdft().unwrap();
+    /// assert!(vol > 0.0);
+    ///
+    /// // Small tree below merchantable size
+    /// let small = Tree { dbh: 4.0, height: Some(30.0), ..tree };
+    /// assert_eq!(small.volume_bdft().unwrap(), 0.0);
+    /// ```
     pub fn volume_bdft(&self) -> Option<f64> {
         self.volume_bdft_with(&VolumeEquation::default())
     }

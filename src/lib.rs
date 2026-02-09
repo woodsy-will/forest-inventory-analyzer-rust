@@ -7,7 +7,12 @@ pub mod visualization;
 #[cfg(feature = "web")]
 pub mod web;
 
-pub use analysis::Analyzer;
+pub use analysis::{
+    Analyzer, ConfidenceInterval, DiameterClass, DiameterDistribution, GrowthModel,
+    GrowthProjection, SamplingStatistics, SpeciesComposition, StandMetrics,
+};
 pub use error::ForestError;
 pub use io::{InventoryReader, InventoryWriter};
-pub use models::{ForestInventory, Plot, Species, Tree, TreeStatus, VolumeEquation};
+pub use models::{
+    ForestInventory, Plot, Species, Tree, TreeStatus, ValidationIssue, VolumeEquation,
+};

@@ -19,6 +19,7 @@ fn create_test_inventory() -> ForestInventory {
             aspect_degrees: Some(180.0),
             elevation_ft: Some(3000.0),
             trees: Vec::new(),
+            stand_id: None,
         };
 
         // Add trees to each plot with varying expansion factors to create
@@ -676,6 +677,7 @@ fn test_single_plot_inventory() {
             age: Some(60),
             defect: None,
         }],
+        stand_id: None,
     });
 
     let metrics = compute_stand_metrics(&inventory);
@@ -710,6 +712,7 @@ fn test_inventory_all_optional_fields_none() {
             age: None,
             defect: None,
         }],
+        stand_id: None,
     });
 
     let metrics = compute_stand_metrics(&inventory);
@@ -759,6 +762,7 @@ fn test_large_inventory() {
             aspect_degrees: Some(180.0),
             elevation_ft: Some(2500.0),
             trees,
+            stand_id: None,
         });
     }
 
@@ -925,6 +929,7 @@ fn test_json_rejects_invalid_data() {
             age: Some(60),
             defect: None,
         }],
+        stand_id: None,
     });
 
     let dir = tempfile::tempdir().unwrap();
@@ -1151,6 +1156,7 @@ fn test_csv_roundtrip_preserves_optional_none_values() {
             age: None,
             defect: None,
         }],
+        stand_id: None,
     });
 
     let dir = tempfile::tempdir().unwrap();

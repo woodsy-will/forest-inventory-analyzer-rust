@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -16,6 +17,8 @@ const MAX_PENDING: usize = 50;
 const PENDING_TTL_SECS: u64 = 30 * 60;
 /// Time-to-live for stored inventories (2 hours).
 const INVENTORY_TTL_SECS: u64 = 2 * 60 * 60;
+/// Minimum seconds between eviction sweeps per table.
+const EVICT_INTERVAL_SECS: u64 = 60;
 
 fn unix_now() -> u64 {
     SystemTime::now()
@@ -26,11 +29,13 @@ fn unix_now() -> u64 {
 
 pub struct AppState {
     db: Mutex<Connection>,
+    last_evict_inventories: AtomicU64,
+    last_evict_pending: AtomicU64,
 }
 
 impl AppState {
-    pub fn new() -> Result<Self, ForestError> {
-        let conn = Connection::open("forest_analyzer.db")
+    pub fn new(db_path: &str) -> Result<Self, ForestError> {
+        let conn = Connection::open(db_path)
             .map_err(|e| ForestError::Database(format!("failed to open database: {e}")))?;
         Self::init_with_connection(conn)
     }
@@ -63,7 +68,19 @@ impl AppState {
 
         Ok(Self {
             db: Mutex::new(conn),
+            last_evict_inventories: AtomicU64::new(0),
+            last_evict_pending: AtomicU64::new(0),
         })
+    }
+
+    /// Run eviction only if enough time has passed since the last sweep.
+    fn maybe_evict(&self, conn: &Connection, table: &str, ttl_secs: u64, tracker: &AtomicU64) {
+        let now = unix_now();
+        let last = tracker.load(Ordering::Relaxed);
+        if now.saturating_sub(last) >= EVICT_INTERVAL_SECS {
+            evict_expired(conn, table, ttl_secs);
+            tracker.store(now, Ordering::Relaxed);
+        }
     }
 
     fn lock_db(&self) -> Result<std::sync::MutexGuard<'_, Connection>, ForestError> {
@@ -74,7 +91,7 @@ impl AppState {
 
     pub fn get_inventory(&self, id: &Uuid) -> Result<Option<ForestInventory>, ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
+        self.maybe_evict(&conn, "inventories", INVENTORY_TTL_SECS, &self.last_evict_inventories);
 
         let mut stmt = conn
             .prepare("SELECT data FROM inventories WHERE id = ?1")
@@ -102,7 +119,7 @@ impl AppState {
         inventory: ForestInventory,
     ) -> Result<(), ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "inventories", INVENTORY_TTL_SECS);
+        self.maybe_evict(&conn, "inventories", INVENTORY_TTL_SECS, &self.last_evict_inventories);
         evict_if_full(&conn, "inventories", MAX_INVENTORIES);
 
         let json = serde_json::to_string(&inventory)?;
@@ -116,7 +133,7 @@ impl AppState {
 
     pub fn get_pending_name(&self, id: &Uuid) -> Result<Option<String>, ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
 
         let mut stmt = conn
             .prepare("SELECT name FROM pending_rows WHERE id = ?1")
@@ -127,7 +144,7 @@ impl AppState {
 
     pub fn has_pending(&self, id: &Uuid) -> Result<bool, ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
 
         let mut stmt = conn
             .prepare("SELECT EXISTS(SELECT 1 FROM pending_rows WHERE id = ?1)")
@@ -145,7 +162,7 @@ impl AppState {
         rows: Vec<EditableTreeRow>,
     ) -> Result<(), ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
         evict_if_full(&conn, "pending_rows", MAX_PENDING);
 
         let json = serde_json::to_string(&rows)?;
@@ -162,7 +179,7 @@ impl AppState {
         id: &Uuid,
     ) -> Result<Option<(String, Vec<EditableTreeRow>)>, ForestError> {
         let conn = self.lock_db()?;
-        evict_expired(&conn, "pending_rows", PENDING_TTL_SECS);
+        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
 
         let mut stmt = conn
             .prepare("SELECT name, rows FROM pending_rows WHERE id = ?1")
@@ -213,6 +230,12 @@ fn evict_if_full(conn: &Connection, table: &str, max: usize) {
 
 #[cfg(test)]
 impl AppState {
+    /// Reset eviction timers so the next access forces an eviction sweep.
+    fn reset_evict_timers(&self) {
+        self.last_evict_inventories.store(0, Ordering::Relaxed);
+        self.last_evict_pending.store(0, Ordering::Relaxed);
+    }
+
     /// Backdate an inventory's created_at timestamp (for TTL eviction testing).
     fn backdate_inventory(&self, id: &Uuid, seconds_ago: u64) {
         let conn = self.db.lock().expect("db mutex poisoned");
@@ -282,6 +305,7 @@ mod tests {
                 age: None,
                 defect: None,
             }],
+            stand_id: None,
         });
         inv
     }
@@ -432,8 +456,9 @@ mod tests {
             .insert_inventory(id, sample_inventory("Expired"))
             .unwrap();
 
-        // Backdate beyond the 2-hour TTL
+        // Backdate beyond the 2-hour TTL and reset eviction timer
         state.backdate_inventory(&id, INVENTORY_TTL_SECS + 60);
+        state.reset_evict_timers();
 
         // Next access should evict it
         assert!(state.get_inventory(&id).unwrap().is_none());
@@ -447,8 +472,9 @@ mod tests {
             .insert_inventory(id, sample_inventory("Fresh"))
             .unwrap();
 
-        // Backdate but still within TTL
+        // Backdate but still within TTL, reset timer to force eviction check
         state.backdate_inventory(&id, INVENTORY_TTL_SECS - 60);
+        state.reset_evict_timers();
 
         assert!(state.get_inventory(&id).unwrap().is_some());
     }
@@ -461,8 +487,9 @@ mod tests {
             .insert_pending(id, "expired.csv".to_string(), sample_rows())
             .unwrap();
 
-        // Backdate beyond the 30-minute TTL
+        // Backdate beyond the 30-minute TTL and reset eviction timer
         state.backdate_pending(&id, PENDING_TTL_SECS + 60);
+        state.reset_evict_timers();
 
         // Next access should evict it
         assert!(!state.has_pending(&id).unwrap());
@@ -478,6 +505,7 @@ mod tests {
             .unwrap();
 
         state.backdate_pending(&id, PENDING_TTL_SECS - 60);
+        state.reset_evict_timers();
 
         assert!(state.has_pending(&id).unwrap());
     }

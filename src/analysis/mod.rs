@@ -1,3 +1,9 @@
+//! Statistical analysis and growth modeling for forest inventory data.
+//!
+//! Key types: [`Analyzer`] (high-level analysis runner), [`StandMetrics`], [`SamplingStatistics`],
+//! [`DiameterDistribution`], and [`GrowthModel`] / [`GrowthProjection`] for stand-level
+//! growth projections.
+
 mod analyzer;
 mod diameter_distribution;
 mod growth;

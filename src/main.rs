@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -16,6 +16,66 @@ use forest_inventory_analyzer::{
         print_statistics_table,
     },
 };
+
+/// Supported input file extensions for inventory data.
+const SUPPORTED_INPUT_EXTS: &[&str] = &["csv", "json", "xlsx", "xls"];
+
+/// Parse and validate a confidence level in (0.0, 1.0) exclusive.
+fn parse_confidence(s: &str) -> Result<f64, String> {
+    let val: f64 = s
+        .parse()
+        .map_err(|_| format!("'{s}' is not a valid number"))?;
+    if val <= 0.0 || val >= 1.0 {
+        return Err(format!(
+            "confidence must be between 0.0 and 1.0 exclusive, got {val}"
+        ));
+    }
+    Ok(val)
+}
+
+/// Extract the lowercased file extension from a path, or empty string if none.
+fn file_extension(path: &Path) -> String {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase()
+}
+
+/// Check whether a path has a supported inventory file extension.
+fn is_supported_inventory_file(path: &Path) -> bool {
+    let ext = file_extension(path);
+    SUPPORTED_INPUT_EXTS.contains(&ext.as_str())
+}
+
+/// Load a forest inventory from a supported file format (CSV, JSON, Excel).
+fn load_inventory(path: &Path) -> Result<forest_inventory_analyzer::models::ForestInventory> {
+    let ext = file_extension(path);
+    match ext.as_str() {
+        "csv" => Ok(io::read_csv(path)?),
+        "json" => Ok(io::read_json(path)?),
+        "xlsx" | "xls" => Ok(io::read_excel(path)?),
+        _ => anyhow::bail!("Unsupported file format: .{ext}. Use .csv, .json, or .xlsx"),
+    }
+}
+
+/// Save a forest inventory to a supported output format (CSV, JSON, Excel, GeoJSON).
+fn save_inventory(
+    inventory: &forest_inventory_analyzer::models::ForestInventory,
+    path: &Path,
+    pretty: bool,
+) -> Result<()> {
+    let ext = file_extension(path);
+    match ext.as_str() {
+        "csv" => io::write_csv(inventory, path)?,
+        "json" => io::write_json(inventory, path, pretty)?,
+        "xlsx" => io::write_excel(inventory, path)?,
+        "geojson" => io::write_geojson(inventory, path, pretty)?,
+        _ => anyhow::bail!(
+            "Unsupported output format: .{ext}. Use .csv, .json, .xlsx, or .geojson"
+        ),
+    }
+    Ok(())
+}
 
 #[derive(Parser)]
 #[command(
@@ -42,7 +102,7 @@ enum Commands {
         input: PathBuf,
 
         /// Confidence level for statistical analysis (0.0-1.0)
-        #[arg(short, long, default_value = "0.95")]
+        #[arg(short, long, default_value = "0.95", value_parser = parse_confidence)]
         confidence: f64,
 
         /// Diameter class width in inches for distribution
@@ -111,7 +171,7 @@ enum Commands {
         output_dir: PathBuf,
 
         /// Confidence level for statistical analysis (0.0-1.0)
-        #[arg(short, long, default_value = "0.95")]
+        #[arg(short, long, default_value = "0.95", value_parser = parse_confidence)]
         confidence: f64,
     },
 
@@ -131,23 +191,10 @@ enum Commands {
     },
 }
 
-fn load_inventory(path: &PathBuf) -> Result<forest_inventory_analyzer::models::ForestInventory> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("")
-        .to_lowercase();
-
-    match ext.as_str() {
-        "csv" => Ok(io::read_csv(path)?),
-        "json" => Ok(io::read_json(path)?),
-        "xlsx" | "xls" => Ok(io::read_excel(path)?),
-        _ => anyhow::bail!("Unsupported file format: .{ext}. Use .csv, .json, or .xlsx"),
-    }
-}
-
 fn main() -> Result<()> {
-    env_logger::init();
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     let cli = Cli::parse();
     let _config = AppConfig::load(&cli.config)?;
 
@@ -191,6 +238,34 @@ fn main() -> Result<()> {
                     eprintln!("{}: {e}", "Warning".yellow());
                 }
             }
+
+            // Per-stand summaries for multi-stand cruise data
+            let stands = inventory.stands();
+            if !stands.is_empty() {
+                println!(
+                    "\n{}",
+                    format!("Per-Stand Summary ({} stands)", stands.len())
+                        .bold()
+                        .cyan()
+                );
+                println!("{}", "=".repeat(72));
+                for (stand_id, sub_inv) in &stands {
+                    let sm = compute_stand_metrics(sub_inv);
+                    println!(
+                        "\n  {} ({} plots, {} trees)",
+                        format!("Stand {stand_id}").bold(),
+                        sub_inv.num_plots(),
+                        sub_inv.num_trees()
+                    );
+                    println!(
+                        "    TPA: {:.1}  |  BA: {:.1} ft\u{00B2}/ac  |  QMD: {:.1}\"  |  Vol: {:.0} bd ft/ac",
+                        sm.total_tpa,
+                        sm.total_basal_area,
+                        sm.quadratic_mean_diameter,
+                        sm.total_volume_bdft
+                    );
+                }
+            }
         }
 
         Commands::Growth {
@@ -203,24 +278,44 @@ fn main() -> Result<()> {
         } => {
             let inventory = load_inventory(&input)?;
 
-            let growth_model = match model.to_lowercase().as_str() {
-                "exponential" | "exp" => GrowthModel::Exponential {
-                    annual_rate: rate,
-                    mortality_rate: mortality.unwrap_or(0.005),
-                },
-                "logistic" | "log" => GrowthModel::Logistic {
-                    annual_rate: rate,
-                    carrying_capacity: capacity,
-                    mortality_rate: mortality.unwrap_or(0.005),
-                },
-                "linear" | "lin" => GrowthModel::Linear {
-                    annual_increment: rate,
-                    mortality_rate: mortality.unwrap_or(0.5),
-                },
-                _ => anyhow::bail!(
-                    "Unknown growth model: {model}. Use: exponential, logistic, or linear"
-                ),
-            };
+            // Parse the model name into a GrowthModel with defaults, then
+            // override individual fields with explicit CLI arguments.
+            let mut growth_model: GrowthModel = model.parse().map_err(|e| {
+                anyhow::anyhow!("{e}")
+            })?;
+
+            // Apply CLI overrides for rate/capacity/mortality
+            match &mut growth_model {
+                GrowthModel::Exponential {
+                    annual_rate,
+                    mortality_rate,
+                } => {
+                    *annual_rate = rate;
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
+                }
+                GrowthModel::Logistic {
+                    annual_rate,
+                    carrying_capacity,
+                    mortality_rate,
+                } => {
+                    *annual_rate = rate;
+                    *carrying_capacity = capacity;
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
+                }
+                GrowthModel::Linear {
+                    annual_increment,
+                    mortality_rate,
+                } => {
+                    *annual_increment = rate;
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
+                }
+            }
 
             println!(
                 "\n{}",
@@ -239,20 +334,7 @@ fn main() -> Result<()> {
             pretty,
         } => {
             let inventory = load_inventory(&input)?;
-
-            let out_ext = output
-                .extension()
-                .and_then(|e| e.to_str())
-                .unwrap_or("")
-                .to_lowercase();
-
-            match out_ext.as_str() {
-                "csv" => io::write_csv(&inventory, &output)?,
-                "json" => io::write_json(&inventory, &output, pretty)?,
-                "xlsx" => io::write_excel(&inventory, &output)?,
-                "geojson" => io::write_geojson(&inventory, &output, pretty)?,
-                _ => anyhow::bail!("Unsupported output format: .{out_ext}. Use .csv, .json, .xlsx, or .geojson"),
-            }
+            save_inventory(&inventory, &output, pretty)?;
 
             println!(
                 "{} Converted {} -> {}",
@@ -272,16 +354,10 @@ fn main() -> Result<()> {
             }
             std::fs::create_dir_all(&output_dir)?;
 
-            let supported_exts = ["csv", "json", "xlsx", "xls"];
             let mut files: Vec<PathBuf> = std::fs::read_dir(&input_dir)?
                 .filter_map(|entry| entry.ok())
                 .map(|entry| entry.path())
-                .filter(|p| {
-                    p.extension()
-                        .and_then(|e| e.to_str())
-                        .map(|e| supported_exts.contains(&e.to_lowercase().as_str()))
-                        .unwrap_or(false)
-                })
+                .filter(|p| is_supported_inventory_file(p))
                 .collect();
             files.sort();
 
@@ -380,8 +456,10 @@ fn main() -> Result<()> {
 
         #[cfg(feature = "web")]
         Commands::Serve { port } => {
+            let mut server_config = _config;
+            server_config.server.port = port;
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(forest_inventory_analyzer::web::start_server(port))?;
+            rt.block_on(forest_inventory_analyzer::web::start_server(server_config))?;
         }
     }
 

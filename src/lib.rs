@@ -1,3 +1,10 @@
+//! Forest inventory analysis library for timber cruising and stand-level metrics.
+//!
+//! Provides I/O in multiple formats (CSV, JSON, Excel, GeoJSON), statistical analysis,
+//! diameter distributions, growth projections, text-based visualization, and an optional
+//! web server (behind the `web` feature). Key entry points: [`Analyzer`], [`ForestInventory`],
+//! [`InventoryReader`], and [`InventoryWriter`].
+
 pub mod analysis;
 pub mod config;
 pub mod error;

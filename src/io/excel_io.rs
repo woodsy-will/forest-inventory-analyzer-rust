@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::Path;
 
 use calamine::{open_workbook, DataType, Reader, Xlsx};
@@ -10,13 +11,19 @@ use super::csv_io::EditableTreeRow;
 
 /// Read forest inventory data from an Excel (.xlsx) file.
 ///
-/// Expects a sheet with columns:
-/// plot_id, tree_id, species_code, species_name, dbh, height, crown_ratio,
-/// status, expansion_factor, age, defect, plot_size_acres, slope_percent,
-/// aspect_degrees, elevation_ft
+/// Auto-detects cruise format (Plot_form sheets) vs standard column layout.
 pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError> {
     let path = path.as_ref();
     let mut workbook: Xlsx<_> = open_workbook(path)?;
+
+    // Auto-detect cruise format
+    if super::cruise_import::is_cruise_format(&workbook.sheet_names().to_vec()) {
+        let name = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Unknown".to_string());
+        return super::cruise_import::read_cruise_excel(&mut workbook, &name);
+    }
 
     let sheet_name = workbook
         .sheet_names()
@@ -77,6 +84,7 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
             aspect_degrees: get_opt_f64(13),
             elevation_ft: get_opt_f64(14),
             trees: Vec::new(),
+            stand_id: None,
         });
 
         plot.trees.push(tree);
@@ -95,11 +103,20 @@ pub fn read_excel(path: impl AsRef<Path>) -> Result<ForestInventory, ForestError
 }
 
 /// Read forest inventory data from Excel bytes.
+///
+/// Auto-detects cruise format (Plot_form sheets) vs standard column layout.
 pub fn read_excel_from_bytes(data: &[u8], name: &str) -> Result<ForestInventory, ForestError> {
     use std::io::Write;
     let mut tmp = tempfile::NamedTempFile::new()?;
     tmp.write_all(data)?;
     tmp.flush()?;
+
+    let mut workbook: Xlsx<_> = open_workbook(tmp.path())?;
+    if super::cruise_import::is_cruise_format(&workbook.sheet_names().to_vec()) {
+        return super::cruise_import::read_cruise_excel(&mut workbook, name);
+    }
+    drop(workbook);
+
     let mut inventory = read_excel(tmp.path())?;
     inventory.name = name.to_string();
     Ok(inventory)
@@ -211,6 +228,8 @@ pub fn write_excel(inventory: &ForestInventory, path: impl AsRef<Path>) -> Resul
 
 /// Parse Excel leniently: write bytes to temp file, read with calamine,
 /// build editable rows, validate all, collect issues.
+///
+/// Auto-detects cruise format (Plot_form sheets) vs standard column layout.
 pub(crate) fn parse_excel_lenient(
     data: &[u8],
     name: &str,
@@ -221,6 +240,11 @@ pub(crate) fn parse_excel_lenient(
     tmp.flush()?;
 
     let mut workbook: Xlsx<_> = open_workbook(tmp.path())?;
+
+    // Auto-detect cruise format
+    if super::cruise_import::is_cruise_format(&workbook.sheet_names().to_vec()) {
+        return super::cruise_import::parse_cruise_lenient(&mut workbook, name);
+    }
 
     let sheet_name = workbook
         .sheet_names()
@@ -246,11 +270,11 @@ pub(crate) fn parse_excel_lenient(
                 plot_id: 0,
                 tree_id: 0,
                 row_index,
-                field: "row".to_string(),
-                message: format!(
+                field: Cow::Borrowed("row"),
+                message: Cow::Owned(format!(
                     "Row has only {} columns (minimum 9 required), skipped",
                     row.len()
-                ),
+                )),
             });
             row_index += 1;
             continue;
@@ -274,8 +298,8 @@ pub(crate) fn parse_excel_lenient(
                     plot_id,
                     tree_id,
                     row_index,
-                    field: "status".to_string(),
-                    message: format!("Unknown tree status '{}', defaulting to Live", status_str),
+                    field: Cow::Borrowed("status"),
+                    message: Cow::Owned(format!("Unknown tree status '{}', defaulting to Live", status_str)),
                 });
                 TreeStatus::Live
             }

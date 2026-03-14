@@ -12,6 +12,7 @@ let growthChart = null;
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const uploadError = document.getElementById('upload-error');
+const uploadProgress = document.getElementById('upload-progress');
 
 dropZone.addEventListener('click', () => fileInput.click());
 
@@ -40,6 +41,10 @@ fileInput.addEventListener('change', () => {
 
 async function uploadFile(file) {
     uploadError.hidden = true;
+    document.getElementById('upload-filename').textContent = file.name;
+    uploadProgress.classList.add('active');
+    dropZone.style.display = 'none';
+
     const formData = new FormData();
     formData.append('file', file);
 
@@ -60,22 +65,23 @@ async function uploadFile(file) {
     } catch (e) {
         uploadError.textContent = e.message;
         uploadError.hidden = false;
+        dropZone.style.display = '';
+    } finally {
+        uploadProgress.classList.remove('active');
     }
 }
 
 function showDashboard(data) {
-    // Populate summary bar
     document.getElementById('inv-name').textContent = data.name;
     document.getElementById('stat-plots').textContent = data.num_plots;
     document.getElementById('stat-trees').textContent = data.num_trees;
     document.getElementById('stat-species').textContent = data.species.length;
 
-    // Show dashboard, hide others
     document.getElementById('upload-section').hidden = true;
     document.getElementById('error-editor').hidden = true;
     document.getElementById('dashboard').hidden = false;
+    document.getElementById('btn-new-analysis').classList.add('visible');
 
-    // Load data in parallel
     Promise.all([loadMetrics(), loadDistribution(), loadStatistics()])
         .then(() => runGrowth());
 }
@@ -94,19 +100,33 @@ async function apiFetch(path) {
 }
 
 // ---------------------------------------------------------------------------
+// Number formatting
+// ---------------------------------------------------------------------------
+
+function fmtNum(n, decimals) {
+    if (n === null || n === undefined) return '--';
+    if (Math.abs(n) >= 1000) {
+        return n.toLocaleString('en-US', {
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+        });
+    }
+    return n.toFixed(decimals);
+}
+
+// ---------------------------------------------------------------------------
 // Metrics
 // ---------------------------------------------------------------------------
 
 async function loadMetrics() {
     try {
         const m = await apiFetch(`/api/${currentId}/metrics`);
-        document.getElementById('metric-tpa').textContent = m.total_tpa.toFixed(1);
-        document.getElementById('metric-ba').textContent = m.total_basal_area.toFixed(1);
-        document.getElementById('metric-vol-cuft').textContent = m.total_volume_cuft.toFixed(1);
-        document.getElementById('metric-vol-bdft').textContent = m.total_volume_bdft.toFixed(0);
-        document.getElementById('metric-qmd').textContent = m.quadratic_mean_diameter.toFixed(1);
+        document.getElementById('metric-tpa').textContent = fmtNum(m.total_tpa, 1);
+        document.getElementById('metric-ba').textContent = fmtNum(m.total_basal_area, 1);
+        document.getElementById('metric-vol-cuft').textContent = fmtNum(m.total_volume_cuft, 0);
+        document.getElementById('metric-vol-bdft').textContent = fmtNum(m.total_volume_bdft, 0);
+        document.getElementById('metric-qmd').textContent = fmtNum(m.quadratic_mean_diameter, 1);
 
-        // Species composition chart
         renderSpeciesChart(m.species_composition);
     } catch (e) {
         console.error('Metrics error:', e);
@@ -117,6 +137,11 @@ async function loadMetrics() {
 // Species Chart
 // ---------------------------------------------------------------------------
 
+const CHART_COLORS = [
+    '#1b4332', '#2d6a4f', '#40916c', '#52b788', '#74c69d',
+    '#95d5b2', '#b7e4c7', '#d8f3dc', '#a7c957', '#6a994e',
+];
+
 function renderSpeciesChart(composition) {
     const ctx = document.getElementById('species-chart').getContext('2d');
     if (speciesChart) speciesChart.destroy();
@@ -124,11 +149,6 @@ function renderSpeciesChart(composition) {
     const labels = composition.map(s => s.species.common_name);
     const baData = composition.map(s => s.basal_area);
     const tpaData = composition.map(s => s.tpa);
-
-    const greens = [
-        '#2d5016', '#3d6b20', '#4d8030', '#5e9540', '#6faa50',
-        '#8fbc5a', '#a0cc6a', '#b5d98a', '#c8e4a0', '#ddf0c0'
-    ];
 
     speciesChart = new Chart(ctx, {
         type: 'bar',
@@ -138,12 +158,14 @@ function renderSpeciesChart(composition) {
                 {
                     label: 'Basal Area (ft\u00b2/ac)',
                     data: baData,
-                    backgroundColor: greens.slice(0, labels.length),
+                    backgroundColor: CHART_COLORS.slice(0, labels.length),
+                    borderRadius: 4,
                 },
                 {
                     label: 'TPA',
                     data: tpaData,
-                    backgroundColor: greens.slice(0, labels.length).map(c => c + '88'),
+                    backgroundColor: CHART_COLORS.slice(0, labels.length).map(c => c + '66'),
+                    borderRadius: 4,
                 }
             ]
         },
@@ -151,10 +173,20 @@ function renderSpeciesChart(composition) {
             indexAxis: 'y',
             responsive: true,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { family: 'Inter', size: 11 }, padding: 16 }
+                }
             },
             scales: {
-                x: { beginAtZero: true }
+                x: {
+                    beginAtZero: true,
+                    grid: { color: '#f0f0f0' },
+                    ticks: { font: { family: 'Inter', size: 11 } }
+                },
+                y: {
+                    ticks: { font: { family: 'Inter', size: 11 } }
+                }
             }
         }
     });
@@ -177,7 +209,7 @@ function renderDiameterChart(dist) {
     const ctx = document.getElementById('diameter-chart').getContext('2d');
     if (diameterChart) diameterChart.destroy();
 
-    const labels = dist.classes.map(c => c.midpoint.toFixed(1) + '"');
+    const labels = dist.classes.map(c => c.midpoint.toFixed(0) + '"');
     const tpaData = dist.classes.map(c => c.tpa);
     const baData = dist.classes.map(c => c.basal_area);
 
@@ -189,13 +221,15 @@ function renderDiameterChart(dist) {
                 {
                     label: 'TPA',
                     data: tpaData,
-                    backgroundColor: '#8fbc5a',
+                    backgroundColor: '#74c69d',
+                    borderRadius: 3,
                     yAxisID: 'y',
                 },
                 {
-                    label: 'Basal Area (ft\u00b2/ac)',
+                    label: 'BA (ft\u00b2/ac)',
                     data: baData,
-                    backgroundColor: '#2d5016',
+                    backgroundColor: '#1b4332',
+                    borderRadius: 3,
                     yAxisID: 'y1',
                 }
             ]
@@ -203,19 +237,27 @@ function renderDiameterChart(dist) {
         options: {
             responsive: true,
             plugins: {
-                legend: { position: 'bottom' }
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { family: 'Inter', size: 11 }, padding: 16 }
+                }
             },
             scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { family: 'Inter', size: 10 }, maxRotation: 45 }
+                },
                 y: {
                     beginAtZero: true,
                     position: 'left',
-                    title: { display: true, text: 'TPA' }
+                    title: { display: true, text: 'TPA', font: { family: 'Inter', size: 11 } },
+                    grid: { color: '#f0f0f0' },
                 },
                 y1: {
                     beginAtZero: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    title: { display: true, text: 'BA (ft\u00b2/ac)' }
+                    title: { display: true, text: 'BA (ft\u00b2/ac)', font: { family: 'Inter', size: 11 } },
                 }
             }
         }
@@ -232,8 +274,10 @@ async function loadStatistics() {
     statsError.hidden = true;
     statsTable.hidden = false;
 
+    const confidence = document.getElementById('confidence-select').value;
+
     try {
-        const stats = await apiFetch(`/api/${currentId}/statistics?confidence=0.95`);
+        const stats = await apiFetch(`/api/${currentId}/statistics?confidence=${confidence}`);
         const tbody = document.getElementById('stats-body');
         tbody.innerHTML = '';
 
@@ -246,14 +290,15 @@ async function loadStatistics() {
 
         for (const [name, ci] of rows) {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${name}</td>
-                <td>${ci.mean.toFixed(2)}</td>
-                <td>${ci.std_error.toFixed(2)}</td>
-                <td>${ci.lower.toFixed(2)}</td>
-                <td>${ci.upper.toFixed(2)}</td>
-                <td>${ci.sampling_error_percent.toFixed(1)}%</td>
-            `;
+            const pct = ci.sampling_error_percent;
+            const pctClass = pct > 20 ? ' style="color:var(--error);font-weight:600"' : '';
+            tr.innerHTML =
+                `<td>${name}</td>` +
+                `<td>${fmtNum(ci.mean, 1)}</td>` +
+                `<td>${fmtNum(ci.std_error, 2)}</td>` +
+                `<td>${fmtNum(ci.lower, 1)}</td>` +
+                `<td>${fmtNum(ci.upper, 1)}</td>` +
+                `<td${pctClass}>${pct.toFixed(1)}%</td>`;
             tbody.appendChild(tr);
         }
     } catch (e) {
@@ -320,27 +365,36 @@ function renderGrowthChart(projections) {
                 {
                     label: 'TPA',
                     data: projections.map(p => p.tpa),
-                    borderColor: '#8fbc5a',
-                    backgroundColor: '#8fbc5a22',
+                    borderColor: '#74c69d',
+                    backgroundColor: '#74c69d18',
+                    fill: true,
                     yAxisID: 'y',
                     tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2,
                 },
                 {
                     label: 'Basal Area (ft\u00b2/ac)',
                     data: projections.map(p => p.basal_area),
-                    borderColor: '#2d5016',
-                    backgroundColor: '#2d501622',
+                    borderColor: '#1b4332',
+                    backgroundColor: '#1b433218',
+                    fill: true,
                     yAxisID: 'y1',
                     tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2,
                 },
                 {
                     label: 'Volume (ft\u00b3/ac)',
                     data: projections.map(p => p.volume_cuft),
-                    borderColor: '#6faa50',
-                    backgroundColor: '#6faa5022',
+                    borderColor: '#52b788',
+                    backgroundColor: '#52b78818',
+                    fill: true,
                     yAxisID: 'y1',
                     borderDash: [5, 5],
                     tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2,
                 }
             ]
         },
@@ -351,19 +405,34 @@ function renderGrowthChart(projections) {
                 intersect: false,
             },
             plugins: {
-                legend: { position: 'bottom' }
+                legend: {
+                    position: 'bottom',
+                    labels: { font: { family: 'Inter', size: 11 }, padding: 16 }
+                },
+                tooltip: {
+                    backgroundColor: '#1a1a2e',
+                    titleFont: { family: 'Inter' },
+                    bodyFont: { family: 'Inter' },
+                    cornerRadius: 8,
+                    padding: 10,
+                }
             },
             scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { font: { family: 'Inter', size: 10 } }
+                },
                 y: {
                     beginAtZero: true,
                     position: 'left',
-                    title: { display: true, text: 'TPA' }
+                    title: { display: true, text: 'TPA', font: { family: 'Inter', size: 11 } },
+                    grid: { color: '#f0f0f0' },
                 },
                 y1: {
                     beginAtZero: true,
                     position: 'right',
                     grid: { drawOnChartArea: false },
-                    title: { display: true, text: 'BA / Volume' }
+                    title: { display: true, text: 'BA / Volume', font: { family: 'Inter', size: 11 } },
                 }
             }
         }
@@ -387,6 +456,7 @@ function showErrorEditor(data) {
     document.getElementById('upload-section').hidden = true;
     document.getElementById('dashboard').hidden = true;
     document.getElementById('error-editor').hidden = false;
+    document.getElementById('btn-new-analysis').classList.add('visible');
 
     renderErrorList(data.errors);
     renderEditTable(data.trees);
@@ -408,7 +478,6 @@ function renderErrorList(errors) {
         badge.appendChild(document.createTextNode(
             ' Plot ' + e.plot_id + ', Tree ' + e.tree_id + ' \u2014 ' + e.field + ': ' + e.message
         ));
-        // Click-to-jump: scroll to the error cell and highlight the row
         badge.addEventListener('click', () => jumpToErrorCell(e.row_index, e.field));
         el.appendChild(badge);
     }
@@ -420,12 +489,9 @@ function jumpToErrorCell(rowIndex, field) {
     );
     if (!td) return;
     const tr = td.closest('tr');
-    // Scroll into view
     td.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // Focus the input/select inside the cell
     const input = td.querySelector('input, select');
     if (input) setTimeout(() => input.focus(), 300);
-    // Briefly highlight the row
     tr.classList.add('highlight-row');
     setTimeout(() => tr.classList.remove('highlight-row'), 1500);
 }
@@ -455,7 +521,6 @@ function renderEditTable(trees) {
     for (const tree of trees) {
         const tr = document.createElement('tr');
         tr.dataset.row = tree.row_index;
-        // Preserve hidden fields that aren't shown in the table
         tr._hiddenFields = {
             slope_percent: tree.slope_percent,
             aspect_degrees: tree.aspect_degrees,
@@ -465,7 +530,7 @@ function renderEditTable(trees) {
         for (const f of EDIT_FIELDS) {
             const td = document.createElement('td');
             td.dataset.field = f.key;
-            td.dataset.label = f.label; // for mobile card layout
+            td.dataset.label = f.label;
 
             const ariaLabel = f.label + ' for row ' + (tree.row_index + 1);
 
@@ -502,7 +567,6 @@ function renderEditTable(trees) {
 }
 
 function highlightErrorCells(errors) {
-    // Clear previous highlights
     document.querySelectorAll('.error-cell').forEach(el => el.classList.remove('error-cell'));
 
     for (const err of errors) {
@@ -531,15 +595,12 @@ function collectTableData() {
                 } else {
                     const isInt = f.key === 'age' || f.key === 'plot_id' || f.key === 'tree_id';
                     const parsed = isInt ? parseInt(val, 10) : parseFloat(val);
-                    // Preserve NaN as 0 only for required fields — server will catch
-                    // the validation error for nonsensical values like 0 DBH
                     row[f.key] = Number.isNaN(parsed) ? 0 : parsed;
                 }
             } else {
                 row[f.key] = val;
             }
         }
-        // Carry forward hidden fields from the original data
         row.slope_percent = tr._hiddenFields ? tr._hiddenFields.slope_percent : null;
         row.aspect_degrees = tr._hiddenFields ? tr._hiddenFields.aspect_degrees : null;
         row.elevation_ft = tr._hiddenFields ? tr._hiddenFields.elevation_ft : null;
@@ -582,16 +643,28 @@ async function revalidateData() {
 }
 
 function startOver() {
-    if (!confirm('Discard all edits and start over with a new file?')) return;
+    const onDashboard = !document.getElementById('dashboard').hidden;
+    const onEditor = !document.getElementById('error-editor').hidden;
+
+    if (onEditor && !confirm('Discard all edits and start over with a new file?')) return;
+
     document.getElementById('error-editor').hidden = true;
     document.getElementById('dashboard').hidden = true;
     document.getElementById('upload-section').hidden = false;
+    document.getElementById('btn-new-analysis').classList.remove('visible');
+    dropZone.style.display = '';
     fileInput.value = '';
     currentId = null;
+
+    // Reset charts
+    if (speciesChart) { speciesChart.destroy(); speciesChart = null; }
+    if (diameterChart) { diameterChart.destroy(); diameterChart = null; }
+    if (growthChart) { growthChart.destroy(); growthChart = null; }
 }
 
-// Expose runGrowth, exportData, and editor functions to HTML onclick handlers
+// Expose to HTML onclick handlers
 window.runGrowth = runGrowth;
 window.exportData = exportData;
 window.revalidateData = revalidateData;
 window.startOver = startOver;
+window.loadStatistics = loadStatistics;

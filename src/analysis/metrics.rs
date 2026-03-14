@@ -45,18 +45,36 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
         };
     }
 
-    let total_tpa = inventory.mean_tpa();
-    let total_ba = inventory.mean_basal_area();
-    let total_vol_cuft = inventory.mean_volume_cuft();
-    let total_vol_bdft = inventory.mean_volume_bdft();
-
-    // QMD across all plots
-    let sum_qmd: f64 = inventory
+    // Single-pass computation of all four per-plot means using fold.
+    let (sum_tpa, sum_ba, sum_vol_cuft, sum_vol_bdft) = inventory
         .plots
         .iter()
-        .map(|p| p.quadratic_mean_diameter())
-        .sum();
-    let qmd = sum_qmd / num_plots;
+        .fold((0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64), |(tpa, ba, vc, vb), plot| {
+            (
+                tpa + plot.trees_per_acre(),
+                ba + plot.basal_area_per_acre(),
+                vc + plot.volume_cuft_per_acre(),
+                vb + plot.volume_bdft_per_acre(),
+            )
+        });
+    let total_tpa = sum_tpa / num_plots;
+    let total_ba = sum_ba / num_plots;
+    let total_vol_cuft = sum_vol_cuft / num_plots;
+    let total_vol_bdft = sum_vol_bdft / num_plots;
+
+    // Stand-level QMD: sqrt(Σ(EF × DBH²) / Σ(EF)) across all live trees
+    let (sum_ef_dbh_sq, sum_ef) = inventory
+        .plots
+        .iter()
+        .flat_map(|p| p.live_trees())
+        .fold((0.0, 0.0), |(dbh_sq, ef), t| {
+            (dbh_sq + t.expansion_factor * t.dbh.powi(2), ef + t.expansion_factor)
+        });
+    let qmd = if sum_ef > 0.0 {
+        (sum_ef_dbh_sq / sum_ef).sqrt()
+    } else {
+        0.0
+    };
 
     // Mean height of all live trees with height measurements
     let (height_sum, height_count) = inventory
@@ -184,6 +202,7 @@ mod tests {
             aspect_degrees: None,
             elevation_ft: None,
             trees,
+            stand_id: None,
         }
     }
 

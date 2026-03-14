@@ -34,6 +34,7 @@ fn sample_inventory() -> ForestInventory {
         slope_percent: Some(15.0),
         aspect_degrees: Some(180.0),
         elevation_ft: Some(1200.0),
+        stand_id: None,
         trees: vec![
             Tree {
                 tree_id: 1,
@@ -93,6 +94,7 @@ fn sample_inventory() -> ForestInventory {
                 defect: None,
             },
         ],
+        stand_id: None,
     });
     inv
 }
@@ -344,4 +346,98 @@ fn test_version_flag() {
         .assert()
         .success()
         .stdout(predicate::str::contains("forest-analyzer"));
+}
+
+// --- Analyze-batch subcommand ---
+
+#[test]
+fn test_analyze_batch_success() {
+    let input_dir = TempDir::new().unwrap();
+    let output_dir = TempDir::new().unwrap();
+
+    // Create 3 CSV files in the input directory
+    for i in 1..=3 {
+        let path = input_dir.path().join(format!("inventory_{i}.csv"));
+        let inv = sample_inventory();
+        write_csv(&inv, &path).unwrap();
+    }
+
+    cmd()
+        .args([
+            "analyze-batch",
+            "--input-dir",
+            input_dir.path().to_str().unwrap(),
+            "--output-dir",
+            output_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Batch Analysis"))
+        .stdout(predicate::str::contains("Processed 3 files"));
+
+    // Verify 3 JSON report files exist in output dir
+    for i in 1..=3 {
+        let report_path = output_dir.path().join(format!("inventory_{i}.json"));
+        assert!(
+            report_path.exists(),
+            "Expected report file not found: {}",
+            report_path.display()
+        );
+    }
+}
+
+#[test]
+fn test_analyze_batch_empty_dir() {
+    let input_dir = TempDir::new().unwrap();
+    let output_dir = TempDir::new().unwrap();
+
+    // Run against empty dir - should fail with appropriate error message
+    cmd()
+        .args([
+            "analyze-batch",
+            "--input-dir",
+            input_dir.path().to_str().unwrap(),
+            "--output-dir",
+            output_dir.path().to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("No inventory files"));
+}
+
+#[test]
+fn test_analyze_batch_output_dir_created() {
+    let input_dir = TempDir::new().unwrap();
+
+    // Create a CSV file
+    let path = input_dir.path().join("test.csv");
+    let inv = sample_inventory();
+    write_csv(&inv, &path).unwrap();
+
+    // Use a non-existent output dir path
+    let output_dir = input_dir.path().join("reports_subdir");
+    assert!(!output_dir.exists(), "Output dir should not exist yet");
+
+    cmd()
+        .args([
+            "analyze-batch",
+            "--input-dir",
+            input_dir.path().to_str().unwrap(),
+            "--output-dir",
+            output_dir.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    // Verify the output directory was created
+    assert!(
+        output_dir.exists(),
+        "Output directory should have been created"
+    );
+    // Verify a report file was generated
+    let report_path = output_dir.join("test.json");
+    assert!(
+        report_path.exists(),
+        "Report file should exist in created output dir"
+    );
 }

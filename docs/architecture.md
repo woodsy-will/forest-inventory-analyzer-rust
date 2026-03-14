@@ -5,7 +5,7 @@
 Forest Inventory Analyzer is a Rust application with three execution modes:
 
 - **Library** (`forest_inventory_analyzer`) — programmatic API for loading, analyzing, and exporting forest inventory data
-- **CLI** (`forest-analyzer`) — command-line interface with five subcommands
+- **CLI** (`forest-analyzer`) — command-line interface with six subcommands
 - **Web server** (feature-gated `web`) — Actix Web server with file upload, analysis dashboards, and data editing
 
 ## Data Flow
@@ -33,11 +33,11 @@ Forest Inventory Analyzer is a Rust application with three execution modes:
                   │                  │                   │
           Visualization         Web Layer           Output Files
           ─────────────        ─────────           ────────────
-          ┌───────────┐     ┌────────────┐     ┌─────────────┐
-          │ Tables     │     │ Actix Web  │     │ CSV / JSON  │
-          │ Histograms │     │ REST API   │     │ Excel       │
-          └───────────┘     │ Dashboard  │     └─────────────┘
-                            └────────────┘
+          ┌───────────┐     ┌────────────┐     ┌──────────────┐
+          │ Tables     │     │ Actix Web  │     │ CSV / JSON   │
+          │ Histograms │     │ REST API   │     │ Excel        │
+          └───────────┘     │ Dashboard  │     │ GeoJSON      │
+                            └────────────┘     └──────────────┘
 ```
 
 ## Layer Descriptions
@@ -53,7 +53,7 @@ Domain types representing forest inventory data.
 | `ForestInventory` | Root type: named collection of plots with aggregate methods |
 | `Species` | Species code + common name pair |
 | `VolumeEquation` | Configurable volume equation coefficients (cubic foot and board foot) |
-| `TreeStatus` | Enum: `Live`, `Dead`, `Cut`, `Ingrowth` |
+| `TreeStatus` | Enum: `Live`, `Dead`, `Cut`, `Missing` |
 | `ValidationIssue` | Field-level validation error (plot, tree, row, field, message) |
 
 ### I/O (`src/io/`)
@@ -67,6 +67,7 @@ File reading/writing with trait-based abstraction.
 | `CsvFormat` | Implements both traits for CSV files |
 | `JsonFormat` | Implements both traits for JSON (with `pretty` option) |
 | `ExcelFormat` | Implements both traits for `.xlsx` files |
+| `GeoJsonFormat` | Implements `InventoryWriter` for GeoJSON export (plots as point features) |
 
 Lenient parsing functions (`parse_csv_lenient`, `parse_json_lenient`, `parse_excel_lenient`) collect all validation issues instead of failing on the first error, enabling the web UI's in-browser data editor.
 
@@ -108,27 +109,47 @@ Actix Web server providing a REST API and embedded single-page dashboard.
 | `state.rs` | `AppState` with SQLite-backed persistence (inventories + pending editable rows) |
 | `static/` | Embedded HTML/JS/CSS dashboard with Chart.js visualizations |
 
+CORS middleware (`actix-cors`) is configured with a restrictive default policy.
+
 API endpoints:
+- `GET /health` — health check (200 OK) for load balancers and uptime monitors
 - `POST /api/upload` — multipart file upload (CSV/JSON/Excel)
 - `POST /api/validate` — revalidate edited rows and promote to inventory
 - `GET /api/{id}/metrics` — stand metrics JSON
 - `GET /api/{id}/statistics?confidence=0.95` — sampling statistics JSON
 - `GET /api/{id}/distribution?class_width=2` — diameter distribution JSON
 - `POST /api/{id}/growth` — growth projection JSON
-- `GET /api/{id}/export?format=csv` — download as CSV or JSON
+- `GET /api/{id}/export?format=csv` — download as CSV, JSON, or GeoJSON
 - `GET /api/{id}/inventory` — raw inventory JSON
 
 ### CLI (`src/main.rs`)
 
-Five subcommands built with `clap` derive:
+Six subcommands built with `clap` derive:
 
 | Command | Description |
 |---------|-------------|
 | `analyze` | Full analysis: metrics, species table, diameter histogram, sampling statistics |
 | `growth` | Growth projection with configurable model, rate, capacity, and mortality |
-| `convert` | Format conversion between CSV, JSON, and Excel |
+| `convert` | Format conversion between CSV, JSON, Excel, and GeoJSON |
+| `analyze-batch` | Process all inventory files in a directory, output JSON reports |
 | `summary` | Quick one-screen inventory summary |
 | `serve` | Start the web UI (requires `web` feature) |
+
+A global `--config` flag accepts a TOML configuration file (defaults to `config.toml`).
+
+### Configuration (`src/config.rs`)
+
+Optional TOML-based configuration loaded at startup.
+
+| Type | Description |
+|------|-------------|
+| `AppConfig` | Root config: `server`, `analysis`, `growth`, `database` sections |
+| `ServerConfig` | Port and max upload size |
+| `AnalysisConfig` | Default confidence level and diameter class width |
+| `GrowthConfig` | Default growth model, rate, capacity, and mortality rate |
+| `DatabaseConfig` | SQLite database file path |
+
+All fields have defaults; the config file is entirely optional. CLI arguments override config values.
 
 ### Error (`src/error.rs`)
 
@@ -150,7 +171,7 @@ Five subcommands built with `clap` derive:
 
 | Feature | Default | Dependencies Added |
 |---------|---------|-------------------|
-| `web` | Yes | `actix-web`, `actix-multipart`, `tokio`, `uuid`, `futures`, `mime`, `rusqlite` |
+| `web` | Yes | `actix-web`, `actix-multipart`, `actix-cors`, `tokio`, `uuid`, `futures`, `mime`, `rusqlite` |
 
 Disable with `cargo build --no-default-features` for a minimal library + CLI without the web server.
 
@@ -164,5 +185,6 @@ Disable with `cargo build --no-default-features` for a minimal library + CLI wit
 | Error handling | `thiserror`, `anyhow` |
 | Output | `comfy-table`, `colored` |
 | Logging | `log`, `env_logger` |
+| Configuration | `toml` |
 | Temp files | `tempfile` |
-| Web (optional) | `actix-web`, `actix-multipart`, `tokio`, `uuid`, `futures`, `mime`, `rusqlite` |
+| Web (optional) | `actix-web`, `actix-multipart`, `actix-cors`, `tokio`, `uuid`, `futures`, `mime`, `rusqlite` |

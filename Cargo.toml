@@ -2,6 +2,7 @@
 name = "forest_inventory_analyzer"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75.0"
 description = "A comprehensive forest inventory analysis tool with statistical modeling, visualization, and growth projections"
 license = "MIT"
 readme = "README.md"
@@ -42,9 +43,9 @@ anyhow = "1"
 comfy-table = "7"
 colored = "2"
 
-# Logging
-log = "0.4"
-env_logger = "0.11"
+# Logging / tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Configuration
 toml = "0.8"
@@ -61,12 +62,15 @@ futures = { version = "0.3", optional = true }
 mime = { version = "0.3", optional = true }
 rusqlite = { version = "0.31", features = ["bundled"], optional = true }
 actix-cors = { version = "0.7", optional = true }
+tracing-actix-web = { version = "0.7", optional = true }
 
 [features]
 default = ["web"]
-web = ["actix-web", "actix-multipart", "tokio", "uuid", "futures", "mime", "rusqlite", "actix-cors"]
+web = ["actix-web", "actix-multipart", "tokio", "uuid", "futures", "mime", "rusqlite", "actix-cors", "tracing-actix-web"]
 
 [dev-dependencies]
 assert_approx_eq = "1"
 assert_cmd = "2"
 predicates = "3"
+proptest = "1"
+insta = "1"

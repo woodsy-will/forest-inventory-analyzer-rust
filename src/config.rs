@@ -1,3 +1,8 @@
+//! Application configuration loaded from an optional `config.toml` file.
+//!
+//! [`AppConfig`] groups settings for the web server, statistical analysis, growth modeling,
+//! and database storage. All fields have sensible defaults so the config file is optional.
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

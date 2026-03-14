@@ -1,31 +1,46 @@
+//! Optional web server providing a REST API and embedded dashboard for forest inventory analysis.
+//!
+//! Gated behind the `web` feature flag. Supports file upload, validation, metrics computation,
+//! growth projections, and data export through HTTP endpoints powered by Actix Web.
+
 mod handlers;
 mod state;
 
 use actix_cors::Cors;
 use actix_web::{http::header, web, App, HttpServer};
 use state::AppState;
+use tracing_actix_web::TracingLogger;
 
-/// Maximum upload size: 50 MB
-const MAX_UPLOAD_SIZE: usize = 50 * 1024 * 1024;
+use crate::config::AppConfig;
 
-pub async fn start_server(port: u16) -> std::io::Result<()> {
-    let state = AppState::new().map_err(|e| std::io::Error::other(e.to_string()))?;
+/// Maximum upload size in bytes enforced during streaming (10 MB).
+pub(crate) const MAX_UPLOAD_SIZE: usize = 10 * 1024 * 1024;
+
+pub async fn start_server(config: AppConfig) -> std::io::Result<()> {
+    let port = config.server.port;
+    let max_upload = config.server.max_upload_bytes;
+
+    let state =
+        AppState::new(&config.database.path).map_err(|e| std::io::Error::other(e.to_string()))?;
     let data = web::Data::new(state);
 
-    println!("Starting Forest Inventory Analyzer web server on http://localhost:{port}");
+    tracing::info!("Starting Forest Inventory Analyzer web server on http://localhost:{port}");
 
-    HttpServer::new(move || {
+    let server = HttpServer::new(move || {
         let multipart_cfg =
-            actix_multipart::form::MultipartFormConfig::default().total_limit(MAX_UPLOAD_SIZE);
-        let payload_cfg = web::PayloadConfig::new(MAX_UPLOAD_SIZE);
-        let json_cfg = web::JsonConfig::default().limit(MAX_UPLOAD_SIZE);
+            actix_multipart::form::MultipartFormConfig::default().total_limit(max_upload);
+        let payload_cfg = web::PayloadConfig::new(max_upload);
+        let json_cfg = web::JsonConfig::default().limit(max_upload);
 
+        let origin = format!("http://localhost:{port}");
         let cors = Cors::default()
+            .allowed_origin(&origin)
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(header::CONTENT_TYPE)
             .max_age(3600);
 
         App::new()
+            .wrap(TracingLogger::default())
             .wrap(cors)
             .app_data(data.clone())
             .app_data(multipart_cfg)
@@ -57,6 +72,17 @@ pub async fn start_server(port: u16) -> std::io::Result<()> {
             )
     })
     .bind(("127.0.0.1", port))?
-    .run()
-    .await
+    .run();
+
+    // Graceful shutdown: spawn a task that listens for ctrl-c
+    let handle = server.handle();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("Shutdown signal received, draining connections...");
+        handle.stop(true).await;
+    });
+
+    server.await?;
+    tracing::info!("Server has shut down");
+    Ok(())
 }

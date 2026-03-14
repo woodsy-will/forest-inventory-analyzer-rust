@@ -1,3 +1,8 @@
+//! Crate-wide error type for forest inventory operations.
+//!
+//! [`ForestError`] covers I/O, CSV/JSON/Excel parsing, validation, analysis,
+//! and database errors with automatic conversions from underlying error types.
+
 use thiserror::Error;
 
 /// Errors that can occur in forest inventory analysis.

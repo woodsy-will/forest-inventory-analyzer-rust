@@ -1,16 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-    --primary: #2d5016;
-    --primary-light: #3d6b20;
-    --accent: #8fbc5a;
-    --accent-light: #b5d98a;
-    --bg: #f5f7f3;
+    --primary: #1b4332;
+    --primary-mid: #2d6a4f;
+    --primary-light: #40916c;
+    --accent: #74c69d;
+    --accent-light: #b7e4c7;
+    --accent-pale: #d8f3dc;
+    --bg: #f8faf7;
     --bg-card: #ffffff;
-    --text: #1a2e0a;
-    --text-muted: #5a6b4a;
-    --border: #d4ddc8;
-    --shadow: rgba(45, 80, 22, 0.1);
-    --error: #c0392b;
-    --error-bg: #fdecea;
+    --text: #1a1a2e;
+    --text-secondary: #555e68;
+    --text-muted: #8a929a;
+    --border: #dee2e6;
+    --border-light: #e9ecef;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    --shadow-lg: 0 8px 30px rgba(0,0,0,0.1);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --error: #dc3545;
+    --error-bg: #fff5f5;
+    --warning: #f59e0b;
+    --warning-bg: #fffbeb;
+    --transition: 0.2s ease;
 }
 
 *, *::before, *::after {
@@ -20,80 +33,196 @@
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.6;
+    min-height: 100vh;
 }
 
+/* ============ Header ============ */
 header {
-    background: var(--primary);
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-mid) 100%);
     color: white;
-    padding: 1.5rem 2rem;
-    text-align: center;
+    padding: 1.25rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(27, 67, 50, 0.3);
+}
+
+.header-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.header-logo {
+    width: 36px;
+    height: 36px;
+    opacity: 0.9;
 }
 
 header h1 {
-    font-size: 1.75rem;
+    font-size: 1.25rem;
     font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
 header .subtitle {
     color: var(--accent-light);
-    font-size: 0.9rem;
-    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    font-weight: 400;
 }
 
+.header-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-header {
+    padding: 0.4rem 1rem;
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: background var(--transition);
+    display: none; /* shown when dashboard is visible */
+}
+
+.btn-header:hover {
+    background: rgba(255,255,255,0.25);
+}
+
+.btn-header.visible {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+/* ============ Main ============ */
 main {
-    max-width: 1200px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 1.5rem;
+    padding: 2rem 1.5rem;
 }
 
-/* Upload */
+section {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============ Upload ============ */
 .drop-zone {
     border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 3rem 2rem;
+    border-radius: var(--radius);
+    padding: 4rem 2rem;
     text-align: center;
     cursor: pointer;
-    transition: border-color 0.2s, background 0.2s;
+    transition: all var(--transition);
     background: var(--bg-card);
+    max-width: 640px;
+    margin: 3rem auto;
 }
 
 .drop-zone:hover,
 .drop-zone.drag-over {
     border-color: var(--accent);
-    background: #f0f5eb;
+    background: var(--accent-pale);
+    transform: scale(1.01);
+}
+
+.drop-zone-icon {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 1rem;
+    background: var(--accent-pale);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.drop-zone-content h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.35rem;
 }
 
 .drop-zone-content p {
-    margin-top: 0.5rem;
     color: var(--text-muted);
+    font-size: 0.9rem;
 }
 
 .drop-zone-content .hint {
     font-size: 0.8rem;
+    margin-top: 0.5rem;
+    color: var(--text-muted);
+}
+
+.upload-progress {
+    display: none;
+    max-width: 640px;
+    margin: 1rem auto 0;
+    padding: 1rem 1.25rem;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow-sm);
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.upload-progress.active {
+    display: flex;
+}
+
+.upload-progress .spinner {
+    flex-shrink: 0;
+}
+
+.upload-progress-text {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.upload-progress-text strong {
+    color: var(--text);
 }
 
 .error-message {
     background: var(--error-bg);
     color: var(--error);
     padding: 0.75rem 1rem;
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
     margin-top: 0.75rem;
     font-size: 0.9rem;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    border-left: 3px solid var(--error);
 }
 
-/* Summary Bar */
+/* ============ Summary Bar ============ */
 .summary-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     background: var(--bg-card);
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: 1rem 1.5rem;
-    box-shadow: 0 2px 8px var(--shadow);
+    box-shadow: var(--shadow);
     margin-bottom: 1.5rem;
     flex-wrap: wrap;
     gap: 0.75rem;
@@ -102,7 +231,7 @@ main {
 .summary-info {
     display: flex;
     align-items: center;
-    gap: 1.25rem;
+    gap: 1.5rem;
     flex-wrap: wrap;
 }
 
@@ -114,7 +243,12 @@ main {
 
 .summary-stat {
     color: var(--text-muted);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+}
+
+.summary-stat strong {
+    color: var(--text);
+    font-weight: 600;
 }
 
 .export-buttons {
@@ -123,20 +257,25 @@ main {
 }
 
 .export-buttons button {
-    padding: 0.4rem 0.9rem;
+    padding: 0.45rem 1rem;
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: var(--bg);
     cursor: pointer;
-    font-size: 0.85rem;
-    transition: background 0.2s;
+    font-size: 0.8rem;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--text-secondary);
+    transition: all var(--transition);
 }
 
 .export-buttons button:hover {
-    background: var(--accent-light);
+    background: var(--accent-pale);
+    border-color: var(--accent);
+    color: var(--primary);
 }
 
-/* Metric Cards */
+/* ============ Metric Cards ============ */
 .metric-cards {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
@@ -146,27 +285,61 @@ main {
 
 .metric-card {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.25rem;
+    border-radius: var(--radius);
+    padding: 1.25rem 1rem;
     text-align: center;
-    box-shadow: 0 2px 8px var(--shadow);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
+    transition: all var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--primary-light));
+    opacity: 0;
+    transition: opacity var(--transition);
+}
+
+.metric-card:hover {
+    box-shadow: var(--shadow);
+    transform: translateY(-2px);
+}
+
+.metric-card:hover::before {
+    opacity: 1;
 }
 
 .metric-label {
-    font-size: 0.8rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    font-weight: 600;
     margin-bottom: 0.5rem;
 }
 
 .metric-value {
-    font-size: 1.5rem;
+    font-size: 1.6rem;
     font-weight: 700;
     color: var(--primary);
+    letter-spacing: -0.02em;
 }
 
-/* Charts */
+.metric-unit {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-top: 0.15rem;
+}
+
+/* ============ Charts ============ */
 .chart-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -176,34 +349,60 @@ main {
 
 .chart-container {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px var(--shadow);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
 }
 
 .chart-container h3 {
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: var(--primary);
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
 }
 
 .chart-wide {
     margin-top: 1rem;
 }
 
-/* Statistics Table */
+/* ============ Statistics ============ */
 .stats-section {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px var(--shadow);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
     margin-bottom: 1.5rem;
 }
 
 .stats-section h3 {
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: var(--primary);
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.stats-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.stats-controls label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-weight: 500;
+}
+
+.stats-controls select {
+    padding: 0.35rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: white;
 }
 
 table {
@@ -212,37 +411,44 @@ table {
 }
 
 th, td {
-    padding: 0.6rem 0.75rem;
+    padding: 0.65rem 0.75rem;
     text-align: right;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.85rem;
 }
 
 th {
     background: var(--bg);
     color: var(--text-muted);
     text-transform: uppercase;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     letter-spacing: 0.05em;
+    font-weight: 600;
 }
 
 th:first-child, td:first-child {
     text-align: left;
 }
 
-/* Growth Controls */
+tbody tr:hover {
+    background: var(--accent-pale);
+}
+
+/* ============ Growth ============ */
 .growth-section {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px var(--shadow);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
     margin-bottom: 1.5rem;
 }
 
 .growth-section h3 {
-    font-size: 1rem;
+    font-size: 0.95rem;
     color: var(--primary);
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
 }
 
 .growth-controls {
@@ -251,47 +457,65 @@ th:first-child, td:first-child {
     gap: 1rem;
     align-items: flex-end;
     margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
 }
 
 .growth-controls label {
     display: flex;
     flex-direction: column;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-muted);
-    gap: 0.25rem;
+    font-weight: 500;
+    gap: 0.3rem;
 }
 
 .growth-controls select,
 .growth-controls input {
-    padding: 0.4rem 0.5rem;
+    padding: 0.45rem 0.5rem;
     border: 1px solid var(--border);
     border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    font-family: inherit;
     background: white;
+    transition: border-color var(--transition);
 }
 
-.growth-controls button {
+.growth-controls select:focus,
+.growth-controls input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(116, 198, 157, 0.2);
+}
+
+.growth-controls button,
+.btn-primary {
     padding: 0.5rem 1.25rem;
     background: var(--primary);
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     font-weight: 600;
-    transition: background 0.2s;
+    font-family: inherit;
+    transition: all var(--transition);
 }
 
-.growth-controls button:hover {
-    background: var(--primary-light);
+.growth-controls button:hover,
+.btn-primary:hover {
+    background: var(--primary-mid);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
 
-/* Error Editor */
+/* ============ Error Editor ============ */
 .error-editor-card {
     background: var(--bg-card);
-    border-radius: 12px;
-    padding: 1.25rem;
-    box-shadow: 0 2px 8px var(--shadow);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
     margin-bottom: 1.5rem;
 }
 
@@ -302,12 +526,26 @@ th:first-child, td:first-child {
     margin-bottom: 1rem;
     flex-wrap: wrap;
     gap: 0.75rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-light);
 }
 
 .error-count {
     font-weight: 700;
     font-size: 1rem;
     color: var(--error);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.error-count::before {
+    content: '';
+    width: 8px;
+    height: 8px;
+    background: var(--error);
+    border-radius: 50%;
+    display: inline-block;
 }
 
 .error-editor-actions {
@@ -315,44 +553,34 @@ th:first-child, td:first-child {
     gap: 0.5rem;
 }
 
-.btn-primary {
-    padding: 0.5rem 1.25rem;
-    background: var(--primary);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
-    transition: background 0.2s;
-}
-
-.btn-primary:hover {
-    background: var(--primary-light);
-}
-
 .btn-secondary {
     padding: 0.5rem 1.25rem;
     background: var(--bg);
-    color: var(--text);
+    color: var(--text-secondary);
     border: 1px solid var(--border);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     cursor: pointer;
-    font-size: 0.9rem;
-    transition: background 0.2s;
+    font-size: 0.85rem;
+    font-weight: 500;
+    font-family: inherit;
+    transition: all var(--transition);
 }
 
 .btn-secondary:hover {
-    background: var(--accent-light);
+    background: var(--accent-pale);
+    border-color: var(--accent);
 }
 
 .error-list {
-    max-height: 160px;
+    max-height: 140px;
     overflow-y: auto;
     margin-bottom: 1rem;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    background: var(--bg);
+    border-radius: var(--radius-sm);
 }
 
 .error-badge {
@@ -363,14 +591,16 @@ th:first-child, td:first-child {
     color: var(--error);
     padding: 0.3rem 0.6rem;
     border-radius: 6px;
-    font-size: 0.78rem;
+    font-size: 0.75rem;
     line-height: 1.3;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: all 0.15s;
+    border: 1px solid transparent;
 }
 
 .error-badge:hover {
-    background: #f9d4d0;
+    background: #fecaca;
+    border-color: var(--error);
 }
 
 .error-badge strong {
@@ -382,7 +612,7 @@ th:first-child, td:first-child {
     max-height: 500px;
     overflow-y: auto;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: var(--radius-sm);
 }
 
 .edit-table {
@@ -400,34 +630,42 @@ th:first-child, td:first-child {
 .edit-table th {
     background: var(--primary);
     color: white;
-    padding: 0.5rem 0.4rem;
+    padding: 0.55rem 0.4rem;
     text-align: center;
-    font-size: 0.72rem;
+    font-size: 0.7rem;
     white-space: nowrap;
+    font-weight: 600;
+    letter-spacing: 0.03em;
 }
 
 .edit-table td {
-    padding: 0.2rem;
-    border-bottom: 1px solid var(--border);
+    padding: 0.25rem;
+    border-bottom: 1px solid var(--border-light);
     text-align: center;
+}
+
+.edit-table tbody tr:hover {
+    background: var(--accent-pale);
 }
 
 .edit-table input,
 .edit-table select {
     width: 100%;
-    padding: 0.3rem 0.35rem;
+    padding: 0.35rem;
     border: 1px solid var(--border);
     border-radius: 4px;
     font-size: 0.82rem;
+    font-family: inherit;
     text-align: center;
     background: white;
+    transition: all var(--transition);
 }
 
 .edit-table input:focus,
 .edit-table select:focus {
     outline: none;
     border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(143, 188, 90, 0.25);
+    box-shadow: 0 0 0 2px rgba(116, 198, 157, 0.25);
 }
 
 .error-cell input,
@@ -439,14 +677,28 @@ th:first-child, td:first-child {
 .error-cell input:focus,
 .error-cell select:focus {
     border-color: var(--error);
-    box-shadow: 0 0 0 2px rgba(192, 57, 43, 0.2);
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
 }
 
-/* Loading state for validate button */
+/* Loading spinner */
+.spinner {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+.spinner-white {
+    border-color: rgba(255,255,255,0.3);
+    border-top-color: white;
+}
+
 .btn-primary.loading {
     opacity: 0.7;
     pointer-events: none;
-    position: relative;
 }
 
 .btn-primary.loading::after {
@@ -455,8 +707,8 @@ th:first-child, td:first-child {
     width: 0.85em;
     height: 0.85em;
     margin-left: 0.5em;
-    border: 2px solid white;
-    border-top-color: transparent;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
     vertical-align: middle;
@@ -466,7 +718,6 @@ th:first-child, td:first-child {
     to { transform: rotate(360deg); }
 }
 
-/* Screen-reader only */
 .sr-only {
     position: absolute;
     width: 1px;
@@ -478,34 +729,63 @@ th:first-child, td:first-child {
     border: 0;
 }
 
-/* Highlight row when jumping from error badge */
 .edit-table tr.highlight-row {
-    background: #fffbe6;
+    background: var(--warning-bg);
     transition: background 0.5s;
 }
 
-/* Responsive */
-@media (max-width: 900px) {
+/* ============ Warning banner for data issues ============ */
+.warning-banner {
+    display: none;
+    padding: 0.75rem 1rem;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    color: #92400e;
+    border-left: 3px solid var(--warning);
+}
+
+.warning-banner.visible {
+    display: block;
+}
+
+/* ============ Responsive ============ */
+@media (max-width: 1024px) {
+    .metric-cards {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        gap: 0.5rem;
+        text-align: center;
+    }
     .metric-cards {
         grid-template-columns: repeat(2, 1fr);
     }
     .chart-row {
         grid-template-columns: 1fr;
     }
-}
-
-@media (max-width: 600px) {
-    .metric-cards {
-        grid-template-columns: 1fr;
-    }
     .summary-bar {
         flex-direction: column;
         align-items: flex-start;
     }
+}
+
+@media (max-width: 480px) {
+    main {
+        padding: 1rem;
+    }
+    .metric-cards {
+        grid-template-columns: 1fr 1fr;
+    }
     .growth-controls {
         flex-direction: column;
     }
-    /* Card-based layout for editor on mobile */
     .edit-table-wrapper {
         max-height: none;
         border: none;
@@ -528,7 +808,7 @@ th:first-child, td:first-child {
     .edit-table tr {
         background: var(--bg-card);
         border: 1px solid var(--border);
-        border-radius: 8px;
+        border-radius: var(--radius-sm);
         margin-bottom: 0.75rem;
         padding: 0.5rem;
     }
@@ -543,7 +823,7 @@ th:first-child, td:first-child {
     .edit-table td::before {
         content: attr(data-label);
         font-weight: 600;
-        font-size: 0.75rem;
+        font-size: 0.72rem;
         color: var(--text-muted);
         text-align: left;
         flex-shrink: 0;

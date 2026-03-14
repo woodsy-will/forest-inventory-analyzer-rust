@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 use crate::error::ForestError;
 use crate::models::ForestInventory;
 
-/// Write a forest inventory as a GeoJSON FeatureCollection.
+/// Build a GeoJSON FeatureCollection value from a forest inventory.
 ///
 /// Each plot becomes a Feature with a null geometry (no coordinates available)
 /// and properties containing plot-level summary metrics plus tree details.
-pub fn write_geojson(inventory: &ForestInventory, path: &Path, pretty: bool) -> Result<(), ForestError> {
+pub fn build_geojson_value(inventory: &ForestInventory) -> Value {
     let features: Vec<Value> = inventory
         .plots
         .iter()
@@ -54,10 +54,15 @@ pub fn write_geojson(inventory: &ForestInventory, path: &Path, pretty: bool) -> 
         })
         .collect();
 
-    let collection = json!({
+    json!({
         "type": "FeatureCollection",
         "features": features,
-    });
+    })
+}
+
+/// Write a forest inventory as a GeoJSON FeatureCollection file.
+pub fn write_geojson(inventory: &ForestInventory, path: &Path, pretty: bool) -> Result<(), ForestError> {
+    let collection = build_geojson_value(inventory);
 
     let content = if pretty {
         serde_json::to_string_pretty(&collection)?
@@ -97,6 +102,7 @@ mod tests {
                 age: None,
                 defect: None,
             }],
+            stand_id: None,
         });
         inv
     }

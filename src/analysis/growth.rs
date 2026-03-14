@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 use crate::error::ForestError;
@@ -25,6 +27,38 @@ pub enum GrowthModel {
         /// Annual TPA mortality (absolute, e.g. 0.5 TPA/year)
         mortality_rate: f64,
     },
+}
+
+impl FromStr for GrowthModel {
+    type Err = ForestError;
+
+    /// Parse a growth model name with sensible defaults.
+    ///
+    /// Accepted values (case-insensitive):
+    /// - `"exponential"` / `"exp"` — Exponential growth (rate=0.03, mortality=0.005)
+    /// - `"logistic"` / `"log"` — Logistic growth (rate=0.03, capacity=300.0, mortality=0.005)
+    /// - `"linear"` / `"lin"` — Linear growth (increment=2.0, mortality=0.5)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "exponential" | "exp" => Ok(GrowthModel::Exponential {
+                annual_rate: 0.03,
+                mortality_rate: 0.005,
+            }),
+            "logistic" | "log" => Ok(GrowthModel::Logistic {
+                annual_rate: 0.03,
+                carrying_capacity: 300.0,
+                mortality_rate: 0.005,
+            }),
+            "linear" | "lin" => Ok(GrowthModel::Linear {
+                annual_increment: 2.0,
+                mortality_rate: 0.5,
+            }),
+            _ => Err(ForestError::ParseError(format!(
+                "Unknown growth model: '{}'. Use: exponential, logistic, or linear",
+                s
+            ))),
+        }
+    }
 }
 
 /// A single year's growth projection.
@@ -160,6 +194,7 @@ mod tests {
             aspect_degrees: None,
             elevation_ft: None,
             trees,
+            stand_id: None,
         }
     }
 
@@ -443,5 +478,88 @@ mod tests {
         };
         let proj = project_growth(&inv, &model, 10).unwrap();
         assert!((proj[10].tpa - proj[0].tpa).abs() < 0.001);
+    }
+
+    // --- FromStr tests ---
+
+    #[test]
+    fn test_from_str_exponential() {
+        let model: GrowthModel = "exponential".parse().unwrap();
+        match model {
+            GrowthModel::Exponential { annual_rate, mortality_rate } => {
+                assert!((annual_rate - 0.03).abs() < 1e-10);
+                assert!((mortality_rate - 0.005).abs() < 1e-10);
+            }
+            _ => panic!("Expected Exponential"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_exp_abbreviation() {
+        let model: GrowthModel = "exp".parse().unwrap();
+        match model {
+            GrowthModel::Exponential { .. } => {}
+            _ => panic!("Expected Exponential"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_logistic() {
+        let model: GrowthModel = "logistic".parse().unwrap();
+        match model {
+            GrowthModel::Logistic { annual_rate, carrying_capacity, mortality_rate } => {
+                assert!((annual_rate - 0.03).abs() < 1e-10);
+                assert!((carrying_capacity - 300.0).abs() < 1e-10);
+                assert!((mortality_rate - 0.005).abs() < 1e-10);
+            }
+            _ => panic!("Expected Logistic"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_log_abbreviation() {
+        let model: GrowthModel = "log".parse().unwrap();
+        match model {
+            GrowthModel::Logistic { .. } => {}
+            _ => panic!("Expected Logistic"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_linear() {
+        let model: GrowthModel = "linear".parse().unwrap();
+        match model {
+            GrowthModel::Linear { annual_increment, mortality_rate } => {
+                assert!((annual_increment - 2.0).abs() < 1e-10);
+                assert!((mortality_rate - 0.5).abs() < 1e-10);
+            }
+            _ => panic!("Expected Linear"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_lin_abbreviation() {
+        let model: GrowthModel = "lin".parse().unwrap();
+        match model {
+            GrowthModel::Linear { .. } => {}
+            _ => panic!("Expected Linear"),
+        }
+    }
+
+    #[test]
+    fn test_from_str_case_insensitive() {
+        assert!("EXPONENTIAL".parse::<GrowthModel>().is_ok());
+        assert!("Logistic".parse::<GrowthModel>().is_ok());
+        assert!("LINEAR".parse::<GrowthModel>().is_ok());
+        assert!("EXP".parse::<GrowthModel>().is_ok());
+        assert!("Log".parse::<GrowthModel>().is_ok());
+        assert!("LIN".parse::<GrowthModel>().is_ok());
+    }
+
+    #[test]
+    fn test_from_str_invalid() {
+        assert!("unknown".parse::<GrowthModel>().is_err());
+        assert!("".parse::<GrowthModel>().is_err());
+        assert!("quadratic".parse::<GrowthModel>().is_err());
     }
 }

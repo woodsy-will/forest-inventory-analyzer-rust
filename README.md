@@ -11,8 +11,10 @@ A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON
 - **Statistical Analysis** - Confidence intervals, sampling error, standard error using Student's t-distribution
 - **Diameter Distribution** - Text-based histogram of diameter classes
 - **Growth Projections** - Exponential, logistic, and linear growth models with configurable mortality
-- **Multi-Format I/O** - Read/write CSV, JSON, and Excel (.xlsx) files
-- **Format Conversion** - Convert between any supported formats
+- **Multi-Format I/O** - Read/write CSV, JSON, and Excel (.xlsx) files; export to GeoJSON
+- **Format Conversion** - Convert between any supported formats (CSV, JSON, Excel, GeoJSON)
+- **Batch Processing** - Analyze entire directories of inventory files with JSON report output
+- **Configuration File** - Optional `config.toml` for persistent settings (server, analysis, growth, database)
 - **Web UI** - Browser-based dashboard with file upload, interactive charts, data editing, and export
 - **SQLite Persistence** - Server-side inventory storage with TTL-based eviction
 
@@ -47,8 +49,8 @@ forest-analyzer analyze --input inventory.csv --confidence 0.90 --diameter-class
 # Logistic growth model, 30-year projection
 forest-analyzer growth --input inventory.csv --years 30 --model logistic --rate 0.03 --capacity 300
 
-# Exponential growth
-forest-analyzer growth --input inventory.csv --model exponential --rate 0.02
+# Exponential growth with custom mortality
+forest-analyzer growth --input inventory.csv --model exponential --rate 0.02 --mortality 0.01
 
 # Linear growth
 forest-analyzer growth --input inventory.csv --model linear --rate 2.0
@@ -65,6 +67,16 @@ forest-analyzer convert --input inventory.csv --output inventory.xlsx
 
 # Excel to CSV
 forest-analyzer convert --input inventory.xlsx --output inventory.csv
+
+# CSV to GeoJSON (plots with elevation/aspect/slope as features)
+forest-analyzer convert --input inventory.csv --output inventory.geojson --pretty
+```
+
+### Batch Analysis
+
+```bash
+# Analyze all inventory files in a directory, output JSON reports
+forest-analyzer analyze-batch --input-dir ./inventories/ --output-dir ./reports/
 ```
 
 ### Quick Summary
@@ -87,7 +99,7 @@ Then open `http://localhost:8080` in your browser. The web UI supports:
 - Uploading CSV, JSON, and Excel files
 - In-browser data editing with validation
 - Interactive stand metrics, statistics, and growth charts
-- Exporting results in CSV or JSON format
+- Exporting results in CSV, JSON, or GeoJSON format
 
 ## Examples
 
@@ -125,6 +137,31 @@ The expected CSV format includes these columns:
 | slope_percent | float | No | Slope percentage |
 | aspect_degrees | float | No | Aspect in degrees |
 | elevation_ft | float | No | Elevation in feet |
+
+## Configuration
+
+An optional `config.toml` file can set persistent defaults (all fields are optional):
+
+```toml
+[server]
+port = 8080
+max_upload_bytes = 52428800   # 50 MB
+
+[analysis]
+confidence_level = 0.95
+diameter_class_width = 2.0
+
+[growth]
+default_model = "logistic"
+annual_rate = 0.03
+carrying_capacity = 300.0
+mortality_rate = 0.005
+
+[database]
+path = "forest_analyzer.db"
+```
+
+Pass a custom config file with `--config path/to/config.toml` (defaults to `config.toml` in the current directory).
 
 ## Library Usage
 

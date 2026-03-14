@@ -1,3 +1,10 @@
+//! Reading and writing forest inventory data in multiple formats.
+//!
+//! Supports CSV, JSON, Excel (.xlsx), and GeoJSON export. Use the [`InventoryReader`] and
+//! [`InventoryWriter`] traits for format-agnostic I/O, or call format-specific functions
+//! directly (e.g., [`read_csv`], [`write_json`]). Includes cruise-format auto-detection.
+
+mod cruise_import;
 mod csv_io;
 mod excel_io;
 mod geojson_io;
@@ -10,7 +17,7 @@ use crate::models::ForestInventory;
 
 pub use csv_io::{read_csv, read_csv_from_bytes, write_csv};
 pub use excel_io::{read_excel, read_excel_from_bytes, write_excel};
-pub use geojson_io::write_geojson;
+pub use geojson_io::{build_geojson_value, write_geojson};
 pub use json_io::{read_json, read_json_from_bytes, write_json};
 
 pub(crate) use csv_io::{parse_csv_lenient, rows_to_inventory, EditableTreeRow};
@@ -132,6 +139,7 @@ mod tests {
                     defect: None,
                 },
             ],
+            stand_id: None,
         });
         inv
     }

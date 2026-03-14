@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use actix_multipart::Multipart;
 use actix_web::{web, HttpResponse};
 use futures::StreamExt;
@@ -122,8 +124,18 @@ pub async fn upload(
             .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
             .unwrap_or_else(|| "unknown".to_string());
 
+        let max_size = super::MAX_UPLOAD_SIZE;
         let mut bytes = Vec::new();
         while let Some(Ok(chunk)) = field.next().await {
+            if bytes.len() + chunk.len() > max_size {
+                return Ok(HttpResponse::PayloadTooLarge().json(ErrorBody {
+                    error: "Payload Too Large".to_string(),
+                    details: format!(
+                        "Upload exceeds maximum allowed size of {} bytes",
+                        max_size
+                    ),
+                }));
+            }
             bytes.extend_from_slice(&chunk);
         }
 
@@ -228,8 +240,8 @@ pub async fn validate_and_submit(
                 plot_id: row.plot_id,
                 tree_id: row.tree_id,
                 row_index: row.row_index,
-                field: "status".to_string(),
-                message: format!("Unknown tree status '{}'", row.status),
+                field: Cow::Borrowed("status"),
+                message: Cow::Owned(format!("Unknown tree status '{}'", row.status)),
             });
         }
 
@@ -300,6 +312,27 @@ pub async fn validate_and_submit(
     }
 }
 
+/// Per-stand summary for the web API response.
+#[derive(Serialize)]
+struct StandSummary {
+    stand_id: u32,
+    num_plots: usize,
+    num_trees: usize,
+    tpa: f64,
+    basal_area: f64,
+    volume_bdft: f64,
+    qmd: f64,
+}
+
+/// Combined metrics response including optional per-stand breakdown.
+#[derive(Serialize)]
+struct MetricsResponse {
+    #[serde(flatten)]
+    metrics: crate::analysis::StandMetrics,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stands: Option<Vec<StandSummary>>,
+}
+
 pub async fn metrics(
     state: web::Data<AppState>,
     path: web::Path<Uuid>,
@@ -309,7 +342,32 @@ pub async fn metrics(
         .get_inventory(&id)?
         .ok_or_else(|| WebError(ForestError::NotFound(format!("Inventory {id} not found"))))?;
     let analyzer = Analyzer::new(&inventory);
-    Ok(HttpResponse::Ok().json(analyzer.stand_metrics()))
+    let metrics = analyzer.stand_metrics();
+
+    let stand_list = inventory.stands();
+    let stands = if stand_list.is_empty() {
+        None
+    } else {
+        Some(
+            stand_list
+                .iter()
+                .map(|(sid, sub_inv)| {
+                    let sm = crate::analysis::compute_stand_metrics(sub_inv);
+                    StandSummary {
+                        stand_id: *sid,
+                        num_plots: sub_inv.num_plots(),
+                        num_trees: sub_inv.num_trees(),
+                        tpa: sm.total_tpa,
+                        basal_area: sm.total_basal_area,
+                        volume_bdft: sm.total_volume_bdft,
+                        qmd: sm.quadratic_mean_diameter,
+                    }
+                })
+                .collect(),
+        )
+    };
+
+    Ok(HttpResponse::Ok().json(MetricsResponse { metrics, stands }))
 }
 
 #[derive(Deserialize)]
@@ -421,7 +479,7 @@ pub async fn export(
                 .body(data))
         }
         "geojson" => {
-            let collection = build_geojson(&inventory);
+            let collection = io::build_geojson_value(&inventory);
             let data = serde_json::to_string_pretty(&collection)
                 .map_err(|e| WebError(ForestError::Json(e)))?;
             let safe_name = sanitize_filename(&inventory.name);
@@ -479,51 +537,6 @@ impl CsvExportRow {
             elevation_ft: plot.elevation_ft,
         }
     }
-}
-
-fn build_geojson(inventory: &crate::models::ForestInventory) -> serde_json::Value {
-    let features: Vec<serde_json::Value> = inventory
-        .plots
-        .iter()
-        .map(|plot| {
-            let trees: Vec<serde_json::Value> = plot
-                .trees
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "tree_id": t.tree_id,
-                        "species_code": t.species.code,
-                        "species_name": t.species.common_name,
-                        "dbh": t.dbh,
-                        "height": t.height,
-                        "crown_ratio": t.crown_ratio,
-                        "status": format!("{:?}", t.status),
-                        "expansion_factor": t.expansion_factor,
-                    })
-                })
-                .collect();
-            serde_json::json!({
-                "type": "Feature",
-                "geometry": serde_json::Value::Null,
-                "properties": {
-                    "plot_id": plot.plot_id,
-                    "plot_size_acres": plot.plot_size_acres,
-                    "slope_percent": plot.slope_percent,
-                    "aspect_degrees": plot.aspect_degrees,
-                    "elevation_ft": plot.elevation_ft,
-                    "trees_per_acre": plot.trees_per_acre(),
-                    "basal_area_per_acre": plot.basal_area_per_acre(),
-                    "num_trees": plot.trees.len(),
-                    "trees": trees,
-                }
-            })
-        })
-        .collect();
-
-    serde_json::json!({
-        "type": "FeatureCollection",
-        "features": features,
-    })
 }
 
 pub async fn inventory_json(
@@ -616,6 +629,7 @@ mod tests {
                     defect: None,
                 },
             ],
+            stand_id: None,
         });
         inv.plots.push(Plot {
             plot_id: 2,
@@ -638,6 +652,7 @@ mod tests {
                 age: Some(70),
                 defect: None,
             }],
+            stand_id: None,
         });
         inv
     }

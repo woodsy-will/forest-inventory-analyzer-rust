@@ -72,6 +72,7 @@ mod tests {
             aspect_degrees: None,
             elevation_ft: None,
             trees,
+            stand_id: None,
         }
     }
 

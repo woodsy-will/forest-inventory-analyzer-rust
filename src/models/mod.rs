@@ -1,3 +1,8 @@
+//! Core domain types for forest inventory data.
+//!
+//! Key types: [`ForestInventory`] (top-level container), [`Plot`], [`Tree`], [`Species`],
+//! [`TreeStatus`], and [`VolumeEquation`].
+
 mod inventory;
 mod plot;
 mod tree;

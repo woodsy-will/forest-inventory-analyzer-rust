@@ -17,6 +17,9 @@ pub struct Plot {
     pub elevation_ft: Option<f64>,
     /// Trees measured on this plot
     pub trees: Vec<Tree>,
+    /// Stand identifier (populated from cruise imports, None for standard imports)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stand_id: Option<u32>,
 }
 
 impl Plot {
@@ -45,6 +48,7 @@ impl Plot {
     ///             status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
     ///         },
     ///     ],
+    ///     stand_id: None,
     /// };
     /// assert!((plot.trees_per_acre() - 5.0).abs() < 0.001);
     /// ```
@@ -69,6 +73,7 @@ impl Plot {
     ///         dbh: 12.0, height: Some(80.0), crown_ratio: None,
     ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
     ///     }],
+    ///     stand_id: None,
     /// };
     /// assert!(plot.basal_area_per_acre() > 0.0);
     /// ```
@@ -144,6 +149,7 @@ mod tests {
             aspect_degrees: Some(180.0),
             elevation_ft: Some(3000.0),
             trees,
+            stand_id: None,
         }
     }
 

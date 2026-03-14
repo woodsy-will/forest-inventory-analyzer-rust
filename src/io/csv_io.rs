@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::io::Read;
 use std::path::Path;
 
@@ -58,6 +59,7 @@ fn parse_csv_records<R: Read>(
             aspect_degrees: row.aspect_degrees,
             elevation_ft: row.elevation_ft,
             trees: Vec::new(),
+            stand_id: None,
         });
 
         plot.trees.push(tree);
@@ -188,6 +190,7 @@ pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestI
             aspect_degrees: row.aspect_degrees,
             elevation_ft: row.elevation_ft,
             trees: Vec::new(),
+            stand_id: None,
         });
 
         plot.trees.push(tree);
@@ -199,6 +202,8 @@ pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestI
     inventory.plots = plot_list;
     inventory
 }
+
+
 
 /// Parse CSV leniently: collect all validation issues instead of failing on the first.
 ///
@@ -229,8 +234,8 @@ pub(crate) fn parse_csv_lenient(
                     plot_id: csv_row.plot_id,
                     tree_id: csv_row.tree_id,
                     row_index,
-                    field: "status".to_string(),
-                    message: format!("Unknown tree status '{}', defaulting to Live", status_str),
+                    field: Cow::Borrowed("status"),
+                    message: Cow::Owned(format!("Unknown tree status '{}', defaulting to Live", status_str)),
                 });
                 TreeStatus::Live
             }

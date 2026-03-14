@@ -1,3 +1,8 @@
+//! Text-based output formatting for stand summaries, species tables, and diameter histograms.
+//!
+//! Each output has a `print_*` variant (writes to stdout) and a `format_*` variant
+//! (returns a `String`), making it easy to use in both CLI and programmatic contexts.
+
 mod charts;
 mod tables;
 

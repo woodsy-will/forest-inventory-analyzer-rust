@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -69,6 +69,7 @@ impl ForestInventory {
     ///         dbh: 14.0, height: Some(90.0), crown_ratio: None,
     ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
     ///     }],
+    ///     stand_id: None,
     /// });
     /// assert!((inv.mean_tpa() - 5.0).abs() < 0.001);
     /// ```
@@ -97,6 +98,7 @@ impl ForestInventory {
     ///         dbh: 14.0, height: Some(90.0), crown_ratio: None,
     ///         status: TreeStatus::Live, expansion_factor: 5.0, age: None, defect: None,
     ///     }],
+    ///     stand_id: None,
     /// });
     /// assert!(inv.mean_basal_area() > 0.0);
     /// ```
@@ -124,6 +126,38 @@ impl ForestInventory {
         }
         let sum: f64 = self.plots.iter().map(|p| p.volume_bdft_per_acre()).sum();
         sum / self.plots.len() as f64
+    }
+
+    /// Split the inventory into per-stand sub-inventories.
+    ///
+    /// Returns a sorted `Vec<(stand_id, ForestInventory)>` where each entry
+    /// contains only the plots belonging to that stand. If no plots have a
+    /// `stand_id`, returns an empty Vec.
+    pub fn stands(&self) -> Vec<(u32, ForestInventory)> {
+        let mut stand_plots: HashMap<u32, Vec<Plot>> = HashMap::new();
+        let mut has_any = false;
+
+        for plot in &self.plots {
+            if let Some(sid) = plot.stand_id {
+                has_any = true;
+                stand_plots.entry(sid).or_default().push(plot.clone());
+            }
+        }
+
+        if !has_any {
+            return Vec::new();
+        }
+
+        let mut result: Vec<(u32, ForestInventory)> = stand_plots
+            .into_iter()
+            .map(|(sid, plots)| {
+                let mut inv = ForestInventory::new(format!("{} - Stand {}", self.name, sid));
+                inv.plots = plots;
+                (sid, inv)
+            })
+            .collect();
+        result.sort_by_key(|(sid, _)| *sid);
+        result
     }
 }
 
@@ -162,6 +196,7 @@ mod tests {
             aspect_degrees: None,
             elevation_ft: None,
             trees,
+            stand_id: None,
         }
     }
 
@@ -335,5 +370,58 @@ mod tests {
 
         assert!((inv.mean_tpa() - plot_tpa).abs() < 0.001);
         assert!((inv.mean_basal_area() - plot_ba).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_stands_returns_empty_when_no_stand_ids() {
+        let inv = sample_inventory();
+        assert!(inv.stands().is_empty());
+    }
+
+    #[test]
+    fn test_stands_groups_by_stand_id() {
+        let df = make_species("DF", "Douglas Fir");
+        let mut inv = ForestInventory::new("Multi-Stand");
+
+        // Stand 13, plot 1
+        let mut p1 = make_plot_with_trees(13001, vec![make_tree(13001, df.clone(), 14.0, TreeStatus::Live)]);
+        p1.stand_id = Some(13);
+        inv.plots.push(p1);
+
+        // Stand 13, plot 2
+        let mut p2 = make_plot_with_trees(13002, vec![make_tree(13002, df.clone(), 16.0, TreeStatus::Live)]);
+        p2.stand_id = Some(13);
+        inv.plots.push(p2);
+
+        // Stand 14, plot 1
+        let mut p3 = make_plot_with_trees(14001, vec![make_tree(14001, df.clone(), 18.0, TreeStatus::Live)]);
+        p3.stand_id = Some(14);
+        inv.plots.push(p3);
+
+        let stands = inv.stands();
+        assert_eq!(stands.len(), 2);
+
+        // Sorted by stand_id
+        assert_eq!(stands[0].0, 13);
+        assert_eq!(stands[0].1.num_plots(), 2);
+        assert_eq!(stands[1].0, 14);
+        assert_eq!(stands[1].1.num_plots(), 1);
+    }
+
+    #[test]
+    fn test_stands_preserves_metrics() {
+        let df = make_species("DF", "Douglas Fir");
+        let mut inv = ForestInventory::new("Stand Metrics");
+
+        let mut p1 = make_plot_with_trees(14001, vec![make_tree(14001, df.clone(), 16.0, TreeStatus::Live)]);
+        p1.stand_id = Some(14);
+        inv.plots.push(p1);
+
+        let stands = inv.stands();
+        assert_eq!(stands.len(), 1);
+        let (sid, sub_inv) = &stands[0];
+        assert_eq!(*sid, 14);
+        assert!(sub_inv.mean_tpa() > 0.0);
+        assert!(sub_inv.mean_basal_area() > 0.0);
     }
 }

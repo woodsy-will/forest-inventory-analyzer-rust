@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 use super::volume::VolumeEquation;
@@ -8,8 +10,8 @@ pub struct ValidationIssue {
     pub plot_id: u32,
     pub tree_id: u32,
     pub row_index: usize,
-    pub field: String,
-    pub message: String,
+    pub field: Cow<'static, str>,
+    pub message: Cow<'static, str>,
 }
 
 /// Status of a tree in the inventory.
@@ -220,8 +222,8 @@ impl Tree {
                 plot_id: self.plot_id,
                 tree_id: self.tree_id,
                 row_index,
-                field: "dbh".to_string(),
-                message: format!("DBH must be positive, got {}", self.dbh),
+                field: Cow::Borrowed("dbh"),
+                message: Cow::Owned(format!("DBH must be positive, got {}", self.dbh)),
             });
         }
         if let Some(h) = self.height {
@@ -230,8 +232,8 @@ impl Tree {
                     plot_id: self.plot_id,
                     tree_id: self.tree_id,
                     row_index,
-                    field: "height".to_string(),
-                    message: format!("height must be positive, got {}", h),
+                    field: Cow::Borrowed("height"),
+                    message: Cow::Owned(format!("height must be positive, got {}", h)),
                 });
             }
         }
@@ -241,8 +243,8 @@ impl Tree {
                     plot_id: self.plot_id,
                     tree_id: self.tree_id,
                     row_index,
-                    field: "crown_ratio".to_string(),
-                    message: format!("crown_ratio must be in 0.0..=1.0, got {}", cr),
+                    field: Cow::Borrowed("crown_ratio"),
+                    message: Cow::Owned(format!("crown_ratio must be in 0.0..=1.0, got {}", cr)),
                 });
             }
         }
@@ -251,11 +253,11 @@ impl Tree {
                 plot_id: self.plot_id,
                 tree_id: self.tree_id,
                 row_index,
-                field: "expansion_factor".to_string(),
-                message: format!(
+                field: Cow::Borrowed("expansion_factor"),
+                message: Cow::Owned(format!(
                     "expansion_factor must be positive, got {}",
                     self.expansion_factor
-                ),
+                )),
             });
         }
         if let Some(d) = self.defect {
@@ -264,8 +266,8 @@ impl Tree {
                     plot_id: self.plot_id,
                     tree_id: self.tree_id,
                     row_index,
-                    field: "defect".to_string(),
-                    message: format!("defect must be in 0.0..=1.0, got {}", d),
+                    field: Cow::Borrowed("defect"),
+                    message: Cow::Owned(format!("defect must be in 0.0..=1.0, got {}", d)),
                 });
             }
         }

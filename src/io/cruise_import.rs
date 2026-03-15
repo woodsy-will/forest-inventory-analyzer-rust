@@ -157,9 +157,9 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
                 dbh: get_f64(dbh_col),
                 height: get_f64(height_col),
                 sampling_method: method_col
-                    .map(|c| get_string(c))
+                    .map(get_string)
                     .unwrap_or_default(),
-                raw_ef: ef_col.map(|c| get_f64(c)).unwrap_or(0.0),
+                raw_ef: ef_col.map(get_f64).unwrap_or(0.0),
                 total_defect_pct,
             });
         }

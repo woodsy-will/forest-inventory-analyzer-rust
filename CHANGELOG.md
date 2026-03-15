@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Number formatting** with locale-aware comma separators for large values
 - **Sampling error highlighting**: values >20% shown in red in the statistics table
 - **Configuration file wired to web server**: `config.toml` settings for `server.port`, `server.max_upload_bytes`, `database.path` are now used by the web server instead of hardcoded constants
+- **Automated release pipeline**: GitHub Actions workflow builds cross-platform binaries on `v*` tag push, packages Windows zip + MSI installer, Linux/macOS tarballs, generates SHA256 checksums, and creates a GitHub Release with all artifacts
+- **Windows MSI installer**: WiX-based installer with Start Menu and Desktop shortcuts, per-user install (no admin required), automatic upgrade detection
+- **`start.bat` launcher**: Double-click to start the web server and auto-open the browser — included in Windows zip and MSI distributions
 
 ### Changed
 - **QMD calculation corrected**: stand-level QMD now uses `sqrt(sum(EF * DBH^2) / sum(EF))` across all live trees instead of averaging per-plot QMDs, which was statistically incorrect

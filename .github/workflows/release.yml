@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-14
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --all-features --target ${{ matrix.target }}
+
+      - name: Package (Windows zip)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/forest-analyzer.exe dist/
+          cp start.bat dist/
+          cp README.md dist/
+          cp CHANGELOG.md dist/
+          cp LICENSE dist/ 2>/dev/null || true
+          cd dist && 7z a ../forest-analyzer-${VERSION}-${{ matrix.target }}.zip *
+
+      - name: Build MSI installer (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          cargo install cargo-wix
+          # Inject tag version into WiX manifest (strip pre-release suffix — WiX needs X.Y.Z only)
+          MSI_VERSION="${VERSION%%-*}"
+          sed -i "s/Version='[0-9]*\.[0-9]*\.[0-9]*'/Version='${MSI_VERSION}'/" wix/main.wxs
+          # cargo-wix expects the binary in target/release (not target/<triple>/release)
+          mkdir -p target/release
+          cp target/${{ matrix.target }}/release/forest-analyzer.exe target/release/forest-analyzer.exe
+          cargo wix --nocapture --no-build -o forest-analyzer-${VERSION}-${{ matrix.target }}.msi
+
+      - name: Package (Unix)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/forest-analyzer dist/
+          cp README.md dist/
+          cp CHANGELOG.md dist/
+          cp LICENSE dist/ 2>/dev/null || true
+          chmod +x dist/forest-analyzer
+          cd dist && tar czf ../forest-analyzer-${VERSION}-${{ matrix.target }}.tar.gz *
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # sha256sum on Linux/Windows, shasum on macOS
+          if command -v sha256sum &>/dev/null; then
+            SHA_CMD="sha256sum"
+          else
+            SHA_CMD="shasum -a 256"
+          fi
+          for file in forest-analyzer-${VERSION}-${{ matrix.target }}.*; do
+            [ -f "$file" ] && $SHA_CMD "$file" > "${file}.sha256"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forest-analyzer-${{ matrix.target }}
+          path: |
+            forest-analyzer-*-${{ matrix.target }}.zip
+            forest-analyzer-*-${{ matrix.target }}.tar.gz
+            forest-analyzer-*-${{ matrix.target }}.msi
+            forest-analyzer-*-${{ matrix.target }}.*.sha256
+          if-no-files-found: ignore
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

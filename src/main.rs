@@ -466,7 +466,7 @@ fn main() -> Result<()> {
 
             // Resolve relative database path relative to the executable's directory
             if !std::path::Path::new(&server_config.database.path).is_absolute() {
-                if let Ok(exe_dir) = std::env::current_exe().and_then(|p| Ok(p.parent().unwrap().to_path_buf())) {
+                if let Ok(exe_dir) = std::env::current_exe().map(|p| p.parent().unwrap().to_path_buf()) {
                     server_config.database.path = exe_dir.join(&server_config.database.path).to_string_lossy().to_string();
                 }
             }

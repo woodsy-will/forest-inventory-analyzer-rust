@@ -20,6 +20,32 @@ A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON
 
 ## Installation
 
+### Pre-built Binaries
+
+Download the latest release from [GitHub Releases](https://github.com/woodsy-will/forest-inventory-analyzer-rust/releases).
+
+**Windows (recommended)**:
+- **MSI installer** — run `forest-analyzer-x86_64-pc-windows-msvc.msi`, installs to `%LocalAppData%\ForestAnalyzer` with Start Menu and Desktop shortcuts (no admin required)
+- **ZIP archive** — extract and double-click `start.bat` to launch the web dashboard
+
+**macOS**:
+```bash
+tar xzf forest-analyzer-*-apple-darwin.tar.gz
+./forest-analyzer serve
+```
+
+**Linux**:
+```bash
+tar xzf forest-analyzer-*-x86_64-unknown-linux-gnu.tar.gz
+./forest-analyzer serve
+```
+
+Supported platforms: Windows x64, Linux x64, macOS Intel (x86_64), macOS Apple Silicon (aarch64).
+
+SHA256 checksums (`.sha256` files) are published alongside each artifact for download verification.
+
+### Build from Source
+
 ```bash
 # Clone the repository
 git clone https://github.com/woodsy-will/forest-inventory-analyzer-rust.git

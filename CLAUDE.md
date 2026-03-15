@@ -79,6 +79,21 @@ cargo run -- analyze --input file.csv
 cargo run -- analyze-batch --input-dir ./data/ --output-dir ./reports/
 ```
 
+## Releasing
+
+Tag a version and push to trigger the automated release pipeline:
+
+```bash
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+This builds binaries for 4 platforms (Windows, Linux, macOS Intel, macOS ARM), creates a Windows MSI installer via cargo-wix, generates SHA256 checksums, and publishes a GitHub Release with all artifacts.
+
+- WiX config: `wix/main.wxs` — version is auto-injected from the git tag
+- Release workflow: `.github/workflows/release.yml`
+- The `UpgradeCode` in `main.wxs` must never change (MSI identity across versions)
+
 ## Test Coverage
 
 - 231 unit tests (models, analysis, I/O, config, error, visualization, web handlers, web state, cruise import)

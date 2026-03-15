@@ -1,0 +1,185 @@
+<?xml version='1.0' encoding='windows-1252'?>
+<!--
+  Forest Inventory Analyzer - WiX MSI Installer
+
+  The Version attribute below is a default for local builds.
+  CI (release.yml) auto-injects the git tag version before building.
+
+  Local build:
+    cargo install cargo-wix
+    cargo wix --nocapture
+
+  Manual build:
+    candle.exe wix/main.wxs -out target/wix/main.wixobj
+    light.exe target/wix/main.wixobj -out target/wix/forest-analyzer.msi
+-->
+<Wix xmlns='http://schemas.microsoft.com/wix/2006/wi'>
+
+    <Product
+        Id='*'
+        Name='Forest Inventory Analyzer'
+        UpgradeCode='4A8B2E6F-1C3D-4E5F-9A0B-7D8E6F2C1A3B'
+        Manufacturer='Forest Inventory Analyzer Contributors'
+        Language='1033'
+        Codepage='1252'
+        Version='0.1.0'>
+
+        <Package Id='*'
+            Keywords='Installer'
+            Description='Forest Inventory Analyzer - Stand metrics, species composition, and growth projections'
+            Manufacturer='Forest Inventory Analyzer Contributors'
+            InstallerVersion='450'
+            Languages='1033'
+            Compressed='yes'
+            InstallScope='perUser'
+            SummaryCodepage='1252' />
+
+        <MajorUpgrade
+            Schedule='afterInstallInitialize'
+            DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.' />
+
+        <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1' />
+        <Property Id='DiskPrompt' Value='Forest Inventory Analyzer Installation' />
+
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id='LocalAppDataFolder' Name='AppData'>
+                <Directory Id='APPLICATIONFOLDER' Name='ForestAnalyzer'>
+                    <Component Id='binary' Guid='*'>
+                        <File
+                            Id='exe'
+                            Name='forest-analyzer.exe'
+                            DiskId='1'
+                            Source='target\release\forest-analyzer.exe'
+                            KeyPath='yes' />
+                    </Component>
+
+                    <Component Id='launcher' Guid='*'>
+                        <File
+                            Id='bat'
+                            Name='start.bat'
+                            DiskId='1'
+                            Source='start.bat'
+                            KeyPath='yes' />
+                    </Component>
+
+                    <Component Id='readme' Guid='*'>
+                        <File
+                            Id='readme'
+                            Name='README.md'
+                            DiskId='1'
+                            Source='README.md'
+                            KeyPath='yes' />
+                    </Component>
+
+                    <Component Id='changelog' Guid='*'>
+                        <File
+                            Id='changelog'
+                            Name='CHANGELOG.md'
+                            DiskId='1'
+                            Source='CHANGELOG.md'
+                            KeyPath='yes' />
+                    </Component>
+
+                    <Component Id='license' Guid='*'>
+                        <File
+                            Id='license'
+                            Name='LICENSE'
+                            DiskId='1'
+                            Source='LICENSE'
+                            KeyPath='yes' />
+                    </Component>
+                </Directory>
+            </Directory>
+
+            <!-- Start Menu shortcut -->
+            <Directory Id='ProgramMenuFolder' Name='Programs'>
+                <Directory Id='ApplicationProgramsFolder' Name='Forest Inventory Analyzer'>
+                    <Component Id='StartMenuShortcut' Guid='*'>
+                        <Shortcut
+                            Id='ApplicationStartMenuShortcut'
+                            Name='Forest Inventory Analyzer'
+                            Description='Open the Forest Inventory Analyzer web dashboard'
+                            Target='[APPLICATIONFOLDER]start.bat'
+                            WorkingDirectory='APPLICATIONFOLDER'
+                            Icon='ForestAnalyzerIcon' />
+
+                        <RemoveFolder Id='CleanUpShortCut' Directory='ApplicationProgramsFolder' On='uninstall' />
+                        <RegistryValue
+                            Root='HKCU'
+                            Key='Software\ForestAnalyzer'
+                            Name='installed'
+                            Type='integer'
+                            Value='1'
+                            KeyPath='yes' />
+                    </Component>
+                </Directory>
+            </Directory>
+
+            <!-- Desktop shortcut -->
+            <Directory Id='DesktopFolder' Name='Desktop'>
+                <Component Id='DesktopShortcut' Guid='*'>
+                    <Shortcut
+                        Id='ApplicationDesktopShortcut'
+                        Name='Forest Inventory Analyzer'
+                        Description='Open the Forest Inventory Analyzer web dashboard'
+                        Target='[APPLICATIONFOLDER]start.bat'
+                        WorkingDirectory='APPLICATIONFOLDER'
+                        Icon='ForestAnalyzerIcon' />
+
+                    <RegistryValue
+                        Root='HKCU'
+                        Key='Software\ForestAnalyzer'
+                        Name='desktopShortcut'
+                        Type='integer'
+                        Value='1'
+                        KeyPath='yes' />
+                </Component>
+            </Directory>
+        </Directory>
+
+        <Feature
+            Id='Binaries'
+            Title='Application'
+            Description='Forest Inventory Analyzer executable and launcher'
+            Level='1'
+            ConfigurableDirectory='APPLICATIONFOLDER'
+            AllowAdvertise='no'
+            Display='expand'
+            Absent='disallow'>
+
+            <ComponentRef Id='binary' />
+            <ComponentRef Id='launcher' />
+            <ComponentRef Id='readme' />
+            <ComponentRef Id='changelog' />
+            <ComponentRef Id='license' />
+
+            <Feature
+                Id='StartMenu'
+                Title='Start Menu Shortcut'
+                Description='Add a shortcut to the Start Menu'
+                Level='1'
+                Absent='allow'>
+                <ComponentRef Id='StartMenuShortcut' />
+            </Feature>
+
+            <Feature
+                Id='Desktop'
+                Title='Desktop Shortcut'
+                Description='Add a shortcut to the Desktop'
+                Level='1'
+                Absent='allow'>
+                <ComponentRef Id='DesktopShortcut' />
+            </Feature>
+        </Feature>
+
+        <Icon Id='ForestAnalyzerIcon' SourceFile='target\release\forest-analyzer.exe' />
+        <Property Id='ARPPRODUCTICON' Value='ForestAnalyzerIcon' />
+
+        <UI>
+            <UIRef Id='WixUI_FeatureTree' />
+            <UIRef Id='WixUI_ErrorProgressText' />
+        </UI>
+
+        <WixVariable Id='WixUILicenseRtf' Value='wix\License.rtf' />
+    </Product>
+</Wix>

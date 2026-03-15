@@ -116,6 +116,7 @@ fn sanitize_filename(name: &str) -> String {
 
 pub async fn upload(
     state: web::Data<AppState>,
+    upload_limit: web::Data<usize>,
     mut payload: Multipart,
 ) -> Result<HttpResponse, WebError> {
     if let Some(Ok(mut field)) = payload.next().await {
@@ -124,7 +125,7 @@ pub async fn upload(
             .and_then(|cd| cd.get_filename().map(|s| s.to_string()))
             .unwrap_or_else(|| "unknown".to_string());
 
-        let max_size = super::MAX_UPLOAD_SIZE;
+        let max_size = *upload_limit.get_ref();
         let mut bytes = Vec::new();
         while let Some(Ok(chunk)) = field.next().await {
             if bytes.len() + chunk.len() > max_size {
@@ -580,6 +581,12 @@ pub async fn style_css() -> HttpResponse {
         .body(include_str!("../../static/style.css"))
 }
 
+pub async fn chart_js() -> HttpResponse {
+    HttpResponse::Ok()
+        .content_type("application/javascript; charset=utf-8")
+        .body(include_str!("../../static/chart.min.js"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -690,8 +697,10 @@ mod tests {
         >,
     > {
         let data = web::Data::new(state);
+        let upload_limit = web::Data::new(10 * 1024 * 1024_usize);
         App::new()
             .app_data(data)
+            .app_data(upload_limit)
             .app_data(web::JsonConfig::default().limit(10 * 1024 * 1024))
             .route("/health", web::get().to(health))
             .route("/api/upload", web::post().to(upload))

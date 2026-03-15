@@ -147,7 +147,7 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
         )
         .collect();
 
-    species_comp.sort_by(|a, b| b.basal_area.partial_cmp(&a.basal_area).unwrap());
+    species_comp.sort_by(|a, b| b.basal_area.partial_cmp(&a.basal_area).unwrap_or(std::cmp::Ordering::Equal));
 
     StandMetrics {
         total_tpa,

@@ -27,6 +27,8 @@ pub struct AppConfig {
 pub struct ServerConfig {
     /// Port for the web server (default: 8080)
     pub port: u16,
+    /// Bind address for the web server (default: "127.0.0.1")
+    pub bind_address: String,
     /// Maximum upload size in bytes (default: 50 MB)
     pub max_upload_bytes: usize,
 }
@@ -64,6 +66,7 @@ impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             port: 8080,
+            bind_address: "127.0.0.1".to_string(),
             max_upload_bytes: 50 * 1024 * 1024,
         }
     }
@@ -120,6 +123,7 @@ mod tests {
     fn test_default_config() {
         let config = AppConfig::default();
         assert_eq!(config.server.port, 8080);
+        assert_eq!(config.server.bind_address, "127.0.0.1");
         assert_eq!(config.server.max_upload_bytes, 50 * 1024 * 1024);
         assert!((config.analysis.confidence_level - 0.95).abs() < f64::EPSILON);
         assert!((config.analysis.diameter_class_width - 2.0).abs() < f64::EPSILON);

@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
 :root {
     --primary: #1b4332;
     --primary-mid: #2d6a4f;
@@ -737,14 +735,15 @@ tbody tr:hover {
 /* ============ Warning banner for data issues ============ */
 .warning-banner {
     display: none;
-    padding: 0.75rem 1rem;
-    background: var(--warning-bg);
-    border: 1px solid var(--warning);
+    padding: 0.85rem 1.15rem;
+    background: var(--accent-pale);
+    border: 1px solid var(--accent);
     border-radius: var(--radius-sm);
     margin-bottom: 1rem;
-    font-size: 0.85rem;
-    color: #92400e;
-    border-left: 3px solid var(--warning);
+    font-size: 0.82rem;
+    color: var(--primary);
+    border-left: 3px solid var(--primary-light);
+    line-height: 1.7;
 }
 
 .warning-banner.visible {

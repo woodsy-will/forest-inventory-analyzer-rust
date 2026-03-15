@@ -128,6 +128,20 @@ async function loadMetrics() {
         document.getElementById('metric-qmd').textContent = fmtNum(m.quadratic_mean_diameter, 1);
 
         renderSpeciesChart(m.species_composition);
+
+        // Show per-stand summary if cruise data has multiple stands
+        const warning = document.getElementById('stand-summary-banner');
+        if (m.stands && m.stands.length > 1) {
+            const lines = m.stands.map(s =>
+                `<strong>Stand ${s.stand_id}</strong> (${s.num_plots} plots, ${s.num_trees} trees): ` +
+                `${fmtNum(s.tpa, 1)} TPA, ${fmtNum(s.basal_area, 1)} BA, ` +
+                `${fmtNum(s.qmd, 1)}" QMD, ${fmtNum(s.volume_bdft, 0)} bd ft/ac`
+            );
+            warning.innerHTML = '<strong>Per-Stand Summary</strong><br>' + lines.join('<br>');
+            warning.classList.add('visible');
+        } else {
+            warning.classList.remove('visible');
+        }
     } catch (e) {
         console.error('Metrics error:', e);
     }

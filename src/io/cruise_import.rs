@@ -251,7 +251,9 @@ pub fn read_cruise_excel<RS: std::io::Read + std::io::Seek>(
             defect,
         };
 
-        plots.get_mut(&key).unwrap().trees.push(tree);
+        if let Some(plot) = plots.get_mut(&key) {
+            plot.trees.push(tree);
+        }
     }
 
     let mut inventory = ForestInventory::new(name);

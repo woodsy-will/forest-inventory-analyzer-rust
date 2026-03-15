@@ -188,6 +188,10 @@ enum Commands {
         /// Port to listen on
         #[arg(short, long, default_value = "8080")]
         port: u16,
+
+        /// Address to bind the server to
+        #[arg(short, long, default_value = "127.0.0.1")]
+        bind: String,
     },
 }
 
@@ -455,9 +459,18 @@ fn main() -> Result<()> {
         }
 
         #[cfg(feature = "web")]
-        Commands::Serve { port } => {
+        Commands::Serve { port, bind } => {
             let mut server_config = _config;
             server_config.server.port = port;
+            server_config.server.bind_address = bind;
+
+            // Resolve relative database path relative to the executable's directory
+            if !std::path::Path::new(&server_config.database.path).is_absolute() {
+                if let Ok(exe_dir) = std::env::current_exe().and_then(|p| Ok(p.parent().unwrap().to_path_buf())) {
+                    server_config.database.path = exe_dir.join(&server_config.database.path).to_string_lossy().to_string();
+                }
+            }
+
             let rt = tokio::runtime::Runtime::new()?;
             rt.block_on(forest_inventory_analyzer::web::start_server(server_config))?;
         }

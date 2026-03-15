@@ -13,10 +13,10 @@ use crate::models::ForestInventory;
 const MAX_INVENTORIES: usize = 100;
 /// Maximum number of pending row sets before oldest is evicted.
 const MAX_PENDING: usize = 50;
-/// Time-to-live for pending rows (30 minutes).
-const PENDING_TTL_SECS: u64 = 30 * 60;
-/// Time-to-live for stored inventories (2 hours).
-const INVENTORY_TTL_SECS: u64 = 2 * 60 * 60;
+/// Time-to-live for pending rows (4 hours).
+const PENDING_TTL_SECS: u64 = 4 * 60 * 60;
+/// Time-to-live for stored inventories (24 hours).
+const INVENTORY_TTL_SECS: u64 = 24 * 60 * 60;
 /// Minimum seconds between eviction sweeps per table.
 const EVICT_INTERVAL_SECS: u64 = 60;
 

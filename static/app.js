@@ -471,10 +471,28 @@ function showErrorEditor(data) {
     document.getElementById('dashboard').hidden = true;
     document.getElementById('error-editor').hidden = false;
     document.getElementById('btn-new-analysis').classList.add('visible');
+    document.getElementById('autofix-banner').hidden = true;
 
     renderErrorList(data.errors);
     renderEditTable(data.trees);
     highlightErrorCells(data.errors);
+
+    // Hint to the user that auto-fix may help
+    const fixablePatterns = [
+        /negative/i, /must be positive/i, /must be in 0\.0/i,
+        /Unknown tree status/i,
+    ];
+    const fixable = data.errors.filter(e =>
+        fixablePatterns.some(p => p.test(e.message))
+    ).length;
+    const hint = document.getElementById('autofix-hint');
+    if (fixable > 0) {
+        hint.textContent = fixable + ' issue' + (fixable !== 1 ? 's' : '') +
+            ' may be auto-fixable \u2014 try "Auto-Fix Issues" above';
+        hint.hidden = false;
+    } else {
+        hint.hidden = true;
+    }
 }
 
 function renderErrorList(errors) {
@@ -641,34 +659,106 @@ async function autofixData() {
         }
         const data = await res.json();
 
-        if (data.fixes.length === 0) {
-            showAutofixBanner('No auto-fixable issues found. Please correct the remaining errors manually.', 'info');
+        if (data.fixes.length === 0 && data.warnings.length === 0) {
+            showAutofixBanner(null, data);
         } else {
-            // Update the table with fixed data
             renderEditTable(data.trees);
             highlightFixedCells(data.fixes);
-            showAutofixBanner(
-                data.fixes.length + ' fix' + (data.fixes.length !== 1 ? 'es' : '') +
-                ' applied: ' + data.fixes.map(f =>
-                    'Row ' + (f.row_index + 1) + ' ' + f.field + ' \u2014 ' + f.reason
-                ).join('; '),
-                'success'
-            );
+            showAutofixBanner(null, data);
         }
     } catch (e) {
-        showAutofixBanner('Auto-fix error: ' + e.message, 'error');
+        showAutofixBanner('Auto-fix error: ' + e.message, null);
     } finally {
         btn.classList.remove('loading');
         btn.disabled = false;
     }
 }
 
-function showAutofixBanner(message, type) {
+function showAutofixBanner(errorMsg, data) {
     const banner = document.getElementById('autofix-banner');
-    banner.textContent = message;
     banner.hidden = false;
-    banner.className = 'autofix-banner autofix-' + type;
-    setTimeout(() => { banner.hidden = true; }, 10000);
+
+    if (errorMsg) {
+        banner.className = 'autofix-banner autofix-error';
+        banner.textContent = errorMsg;
+        return;
+    }
+
+    const s = data.summary;
+    banner.innerHTML = '';
+
+    if (s.total_fixes === 0 && s.warnings_count === 0) {
+        banner.className = 'autofix-banner autofix-info';
+        banner.textContent = 'No auto-fixable issues found. Please correct the remaining errors manually.';
+        return;
+    }
+
+    banner.className = 'autofix-banner ' + (s.total_fixes > 0 ? 'autofix-success' : 'autofix-info');
+
+    // Summary line
+    if (s.total_fixes > 0) {
+        const parts = [];
+        if (s.whitespace_trimmed) parts.push(s.whitespace_trimmed + ' whitespace');
+        if (s.status_normalized) parts.push(s.status_normalized + ' status');
+        if (s.signs_corrected) parts.push(s.signs_corrected + ' sign');
+        if (s.units_converted) parts.push(s.units_converted + ' unit');
+        if (s.heights_corrected) parts.push(s.heights_corrected + ' height');
+        if (s.dbh_converted) parts.push(s.dbh_converted + ' DBH unit');
+
+        const header = document.createElement('div');
+        header.className = 'autofix-header';
+        header.innerHTML = '<strong>' + s.total_fixes + ' fix' +
+            (s.total_fixes !== 1 ? 'es' : '') + ' applied</strong> (' + parts.join(', ') + ')';
+        banner.appendChild(header);
+    }
+
+    // Low/medium confidence fixes that need review
+    const reviewable = data.fixes.filter(f => f.confidence !== 'high');
+    if (reviewable.length > 0) {
+        const reviewDiv = document.createElement('div');
+        reviewDiv.className = 'autofix-review';
+        reviewDiv.innerHTML = '<strong>Review these heuristic fixes:</strong>';
+        const ul = document.createElement('ul');
+        for (const f of reviewable) {
+            const li = document.createElement('li');
+            const conf = f.confidence === 'low' ? ' [low confidence]' : '';
+            li.textContent = 'Row ' + (f.row_index + 1) + ' ' + f.field +
+                ': ' + f.original + ' \u2192 ' + f.fixed + conf +
+                ' \u2014 ' + f.reason;
+            ul.appendChild(li);
+        }
+        reviewDiv.appendChild(ul);
+        banner.appendChild(reviewDiv);
+    }
+
+    // Warnings
+    if (data.warnings.length > 0) {
+        const warnDiv = document.createElement('div');
+        warnDiv.className = 'autofix-warnings';
+        warnDiv.innerHTML = '<strong>' + data.warnings.length +
+            ' warning' + (data.warnings.length !== 1 ? 's' : '') +
+            ' (manual review needed):</strong>';
+        const ul = document.createElement('ul');
+        for (const w of data.warnings) {
+            const li = document.createElement('li');
+            li.textContent = 'Row ' + (w.row_index + 1) + ' ' + w.field +
+                ' = ' + w.value + ': ' + w.message;
+            li.className = 'autofix-warning-item';
+            li.style.cursor = 'pointer';
+            li.addEventListener('click', () => jumpToErrorCell(w.row_index, w.field));
+            ul.appendChild(li);
+        }
+        warnDiv.appendChild(ul);
+        banner.appendChild(warnDiv);
+    }
+
+    // Dismiss button
+    const dismiss = document.createElement('button');
+    dismiss.className = 'autofix-dismiss';
+    dismiss.textContent = '\u00d7';
+    dismiss.title = 'Dismiss';
+    dismiss.addEventListener('click', () => { banner.hidden = true; });
+    banner.appendChild(dismiss);
 }
 
 function highlightFixedCells(fixes) {
@@ -676,10 +766,10 @@ function highlightFixedCells(fixes) {
         const td = document.querySelector(
             `#edit-table-body tr[data-row="${fix.row_index}"] td[data-field="${fix.field}"]`
         );
-        if (td) {
-            td.classList.add('fixed-cell');
-            setTimeout(() => td.classList.remove('fixed-cell'), 5000);
-        }
+        if (!td) continue;
+        // Color by confidence: green for high, yellow for medium/low
+        const cls = fix.confidence === 'high' ? 'fixed-cell' : 'fixed-cell-review';
+        td.classList.add(cls);
     }
 }
 

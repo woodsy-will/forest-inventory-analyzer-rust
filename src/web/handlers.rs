@@ -323,6 +323,17 @@ pub struct AutofixRequest {
     trees: Vec<EditableTreeRow>,
 }
 
+/// Confidence level for an auto-fix. High-confidence fixes are almost certainly
+/// correct (e.g. trimming whitespace). Low-confidence fixes are heuristic guesses
+/// that the user should verify (e.g. assuming a large DBH is in centimeters).
+#[derive(Serialize, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum FixConfidence {
+    High,
+    Medium,
+    Low,
+}
+
 /// Description of a single auto-fix that was applied.
 #[derive(Serialize)]
 struct AutofixAction {
@@ -331,23 +342,62 @@ struct AutofixAction {
     original: String,
     fixed: String,
     reason: String,
+    confidence: FixConfidence,
+}
+
+/// Warning about a data quality issue that cannot be auto-fixed.
+#[derive(Serialize)]
+struct AutofixWarning {
+    row_index: usize,
+    field: String,
+    value: String,
+    message: String,
 }
 
 #[derive(Serialize)]
 struct AutofixResponse {
     trees: Vec<EditableTreeRow>,
     fixes: Vec<AutofixAction>,
+    warnings: Vec<AutofixWarning>,
+    summary: AutofixSummary,
 }
 
+#[derive(Serialize, Default)]
+struct AutofixSummary {
+    total_fixes: usize,
+    status_normalized: usize,
+    signs_corrected: usize,
+    units_converted: usize,
+    whitespace_trimmed: usize,
+    heights_corrected: usize,
+    dbh_converted: usize,
+    warnings_count: usize,
+}
+
+/// Maximum plausible tree height in feet — matches cruise_import.rs.
+const MAX_TREE_HEIGHT_FT: f64 = 300.0;
+
+/// Maximum plausible DBH in inches for North American species.
+/// Coastal redwoods and giant sequoia can exceed this, but for general
+/// inventory data a DBH above this threshold is almost certainly a unit
+/// or decimal entry error.
+const MAX_PLAUSIBLE_DBH_IN: f64 = 120.0;
+
+/// Conversion factor from centimeters to inches.
+const CM_TO_IN: f64 = 0.393701;
+
+/// Conversion factor from meters to feet.
+const M_TO_FT: f64 = 3.28084;
+
 /// Attempt to normalize a status string to a valid TreeStatus value.
-/// Returns the canonical Display form (e.g. "Live") or None if unrecognizable.
+/// Recognizes common forestry synonyms, numeric codes, and abbreviations.
 fn normalize_status(s: &str) -> Option<&'static str> {
     let lower = s.trim().to_lowercase();
     match lower.as_str() {
-        "live" | "l" | "alive" | "living" | "1" => Some("Live"),
+        "live" | "l" | "alive" | "living" | "green" | "1" => Some("Live"),
         "dead" | "d" | "snag" | "standing dead" | "2" => Some("Dead"),
-        "cut" | "c" | "harvested" | "stump" | "3" => Some("Cut"),
-        "missing" | "m" | "not found" | "4" => Some("Missing"),
+        "cut" | "c" | "harvested" | "stump" | "removed" | "3" => Some("Cut"),
+        "missing" | "m" | "not found" | "ingrowth" | "4" => Some("Missing"),
         _ => None,
     }
 }
@@ -356,7 +406,6 @@ pub async fn autofix(
     state: web::Data<AppState>,
     body: web::Json<AutofixRequest>,
 ) -> Result<HttpResponse, WebError> {
-    // Reject requests for unknown IDs
     if !state.has_pending(&body.id)? {
         return Ok(HttpResponse::NotFound().json(ErrorBody {
             error: "Not Found".to_string(),
@@ -366,9 +415,80 @@ pub async fn autofix(
 
     let mut rows = body.trees.clone();
     let mut fixes = Vec::new();
+    let mut warnings: Vec<AutofixWarning> = Vec::new();
+    let mut summary = AutofixSummary::default();
 
+    // --- Pass 1: detect whether the whole dataset might be in metric units ---
+    // If the majority of DBH values exceed the plausible inch range but fall
+    // within a plausible cm range, the dataset is likely metric.
+    let dbh_values: Vec<f64> = rows.iter().map(|r| r.dbh.abs()).collect();
+    let large_dbh_count = dbh_values.iter().filter(|&&d| d > MAX_PLAUSIBLE_DBH_IN).count();
+    let plausible_cm_count = dbh_values
+        .iter()
+        .filter(|&&d| d > MAX_PLAUSIBLE_DBH_IN && (d * CM_TO_IN) >= 1.0 && (d * CM_TO_IN) <= MAX_PLAUSIBLE_DBH_IN)
+        .count();
+    let dataset_likely_cm = rows.len() >= 3
+        && large_dbh_count > rows.len() / 2
+        && plausible_cm_count == large_dbh_count;
+
+    // Same for heights: detect if height values look like meters
+    let height_values: Vec<f64> = rows
+        .iter()
+        .filter_map(|r| r.height.map(|h| h.abs()))
+        .collect();
+    let tall_count = height_values.iter().filter(|&&h| h > MAX_TREE_HEIGHT_FT).count();
+    // Heights >300 that look like meters (i.e. original value 92-300m → 300-984ft)
+    // are less common; instead detect if most heights are in a plausible meter range (1-100m)
+    let meter_range_count = height_values
+        .iter()
+        .filter(|&&h| (1.0..=100.0).contains(&h))
+        .count();
+    let dataset_likely_meters = !height_values.is_empty()
+        && height_values.len() >= 3
+        && meter_range_count > height_values.len() / 2
+        && tall_count == 0
+        // Heuristic: if median height < 100 and all are < 100, probably meters
+        // But only trigger if the median is suspiciously low for feet
+        && {
+            let mut sorted = height_values.clone();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            let median = sorted[sorted.len() / 2];
+            // Most North American timber trees are 40-200 ft. If the median is
+            // below 50 and all values are under 100, strong signal they're meters.
+            median < 50.0 && *sorted.last().unwrap() <= 100.0
+        };
+
+    // --- Pass 2: per-row fixes ---
     for row in &mut rows {
         let ri = row.row_index;
+
+        // --- Species code/name whitespace trimming ---
+        let trimmed_code = row.species_code.trim().to_uppercase();
+        if trimmed_code != row.species_code {
+            fixes.push(AutofixAction {
+                row_index: ri,
+                field: "species_code".to_string(),
+                original: row.species_code.clone(),
+                fixed: trimmed_code.clone(),
+                reason: "Trimmed whitespace and normalized case on species code".to_string(),
+                confidence: FixConfidence::High,
+            });
+            summary.whitespace_trimmed += 1;
+            row.species_code = trimmed_code;
+        }
+        let trimmed_name = row.species_name.trim().to_string();
+        if trimmed_name != row.species_name {
+            fixes.push(AutofixAction {
+                row_index: ri,
+                field: "species_name".to_string(),
+                original: row.species_name.clone(),
+                fixed: trimmed_name.clone(),
+                reason: "Trimmed whitespace on species name".to_string(),
+                confidence: FixConfidence::High,
+            });
+            summary.whitespace_trimmed += 1;
+            row.species_name = trimmed_name;
+        }
 
         // --- Status normalization ---
         if row.status.parse::<TreeStatus>().is_err() {
@@ -379,7 +499,9 @@ pub async fn autofix(
                     original: row.status.clone(),
                     fixed: canonical.to_string(),
                     reason: format!("Normalized '{}' to '{}'", row.status, canonical),
+                    confidence: FixConfidence::High,
                 });
+                summary.status_normalized += 1;
                 row.status = canonical.to_string();
             }
         }
@@ -393,12 +515,46 @@ pub async fn autofix(
                 original: format!("{}", row.dbh),
                 fixed: format!("{}", fixed),
                 reason: "Converted negative DBH to absolute value".to_string(),
+                confidence: FixConfidence::High,
             });
+            summary.signs_corrected += 1;
             row.dbh = fixed;
         }
 
-        // --- Negative height → absolute value ---
+        // --- DBH unit conversion: cm → inches ---
+        if row.dbh > MAX_PLAUSIBLE_DBH_IN {
+            let converted = row.dbh * CM_TO_IN;
+            if dataset_likely_cm && (1.0..=MAX_PLAUSIBLE_DBH_IN).contains(&converted) {
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "dbh".to_string(),
+                    original: format!("{:.1}", row.dbh),
+                    fixed: format!("{:.1}", converted),
+                    reason: format!(
+                        "Converted DBH from centimeters ({:.1} cm) to inches ({:.1}\")",
+                        row.dbh, converted
+                    ),
+                    confidence: FixConfidence::Medium,
+                });
+                summary.dbh_converted += 1;
+                row.dbh = converted;
+            } else {
+                // Can't confidently fix — maybe a decimal point error or truly wrong
+                warnings.push(AutofixWarning {
+                    row_index: ri,
+                    field: "dbh".to_string(),
+                    value: format!("{:.1}", row.dbh),
+                    message: format!(
+                        "DBH of {:.1}\" exceeds {:.0}\" — verify units or check for decimal error",
+                        row.dbh, MAX_PLAUSIBLE_DBH_IN
+                    ),
+                });
+            }
+        }
+
+        // --- Height fixes ---
         if let Some(h) = row.height {
+            // Negative height
             if h < 0.0 {
                 let fixed = h.abs();
                 fixes.push(AutofixAction {
@@ -407,8 +563,59 @@ pub async fn autofix(
                     original: format!("{}", h),
                     fixed: format!("{}", fixed),
                     reason: "Converted negative height to absolute value".to_string(),
+                    confidence: FixConfidence::High,
                 });
+                summary.signs_corrected += 1;
                 row.height = Some(fixed);
+            }
+
+            let h = row.height.unwrap(); // re-read after possible sign fix
+
+            if h > MAX_TREE_HEIGHT_FT {
+                // Height > 300: likely a decimal entry error (e.g. 1000 = 100.0)
+                // or recorded in decifeet. Try dividing by 10 first.
+                let div10 = h / 10.0;
+                if div10 > 10.0 && div10 <= MAX_TREE_HEIGHT_FT {
+                    fixes.push(AutofixAction {
+                        row_index: ri,
+                        field: "height".to_string(),
+                        original: format!("{:.0}", h),
+                        fixed: format!("{:.1}", div10),
+                        reason: format!(
+                            "Height {:.0} ft exceeds {:.0} ft max — corrected likely decimal/units error to {:.1} ft",
+                            h, MAX_TREE_HEIGHT_FT, div10
+                        ),
+                        confidence: FixConfidence::Medium,
+                    });
+                    summary.heights_corrected += 1;
+                    row.height = Some(div10);
+                } else {
+                    warnings.push(AutofixWarning {
+                        row_index: ri,
+                        field: "height".to_string(),
+                        value: format!("{:.0}", h),
+                        message: format!(
+                            "Height {:.0} ft exceeds {:.0} ft maximum — likely data entry error",
+                            h, MAX_TREE_HEIGHT_FT
+                        ),
+                    });
+                }
+            } else if dataset_likely_meters && h > 0.0 && h <= 100.0 {
+                // Whole dataset appears to be in meters
+                let converted = h * M_TO_FT;
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "height".to_string(),
+                    original: format!("{:.1}", h),
+                    fixed: format!("{:.1}", converted),
+                    reason: format!(
+                        "Converted height from meters ({:.1} m) to feet ({:.1} ft)",
+                        h, converted
+                    ),
+                    confidence: FixConfidence::Low,
+                });
+                summary.heights_corrected += 1;
+                row.height = Some(converted);
             }
         }
 
@@ -420,12 +627,14 @@ pub async fn autofix(
                     row_index: ri,
                     field: "crown_ratio".to_string(),
                     original: format!("{}", cr),
-                    fixed: format!("{:.4}", fixed),
+                    fixed: format!("{:.2}", fixed),
                     reason: format!(
-                        "Converted crown ratio from percentage ({}) to proportion ({:.4})",
+                        "Crown ratio {} looks like a percentage — converted to {:.2} proportion",
                         cr, fixed
                     ),
+                    confidence: FixConfidence::High,
                 });
+                summary.units_converted += 1;
                 row.crown_ratio = Some(fixed);
             } else if cr < 0.0 {
                 let fixed = cr.abs();
@@ -438,9 +647,11 @@ pub async fn autofix(
                     row_index: ri,
                     field: "crown_ratio".to_string(),
                     original: format!("{}", cr),
-                    fixed: format!("{:.4}", fixed),
+                    fixed: format!("{:.2}", fixed),
                     reason: "Corrected negative crown ratio".to_string(),
+                    confidence: FixConfidence::High,
                 });
+                summary.signs_corrected += 1;
                 row.crown_ratio = Some(fixed);
             }
         }
@@ -454,7 +665,9 @@ pub async fn autofix(
                 original: format!("{}", row.expansion_factor),
                 fixed: format!("{}", fixed),
                 reason: "Converted negative expansion factor to absolute value".to_string(),
+                confidence: FixConfidence::High,
             });
+            summary.signs_corrected += 1;
             row.expansion_factor = fixed;
         }
 
@@ -466,12 +679,14 @@ pub async fn autofix(
                     row_index: ri,
                     field: "defect".to_string(),
                     original: format!("{}", d),
-                    fixed: format!("{:.4}", fixed),
+                    fixed: format!("{:.2}", fixed),
                     reason: format!(
-                        "Converted defect from percentage ({}) to proportion ({:.4})",
+                        "Defect {} looks like a percentage — converted to {:.2} proportion",
                         d, fixed
                     ),
+                    confidence: FixConfidence::High,
                 });
+                summary.units_converted += 1;
                 row.defect = Some(fixed);
             } else if d < 0.0 {
                 let fixed = d.abs();
@@ -484,15 +699,53 @@ pub async fn autofix(
                     row_index: ri,
                     field: "defect".to_string(),
                     original: format!("{}", d),
-                    fixed: format!("{:.4}", fixed),
+                    fixed: format!("{:.2}", fixed),
                     reason: "Corrected negative defect value".to_string(),
+                    confidence: FixConfidence::High,
                 });
+                summary.signs_corrected += 1;
                 row.defect = Some(fixed);
             }
         }
     }
 
-    Ok(HttpResponse::Ok().json(AutofixResponse { trees: rows, fixes }))
+    // --- Pass 3: cross-row checks (duplicate tree IDs within plots) ---
+    let mut plot_tree_ids: std::collections::HashMap<u32, Vec<(u32, usize)>> =
+        std::collections::HashMap::new();
+    for row in &rows {
+        plot_tree_ids
+            .entry(row.plot_id)
+            .or_default()
+            .push((row.tree_id, row.row_index));
+    }
+    for (plot_id, trees) in &plot_tree_ids {
+        let mut seen: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+        for &(tree_id, row_idx) in trees {
+            if let Some(&first_row) = seen.get(&tree_id) {
+                warnings.push(AutofixWarning {
+                    row_index: row_idx,
+                    field: "tree_id".to_string(),
+                    value: format!("{}", tree_id),
+                    message: format!(
+                        "Duplicate tree ID {} in plot {} (first seen in row {}) — verify this is not a data entry error",
+                        tree_id, plot_id, first_row + 1
+                    ),
+                });
+            } else {
+                seen.insert(tree_id, row_idx);
+            }
+        }
+    }
+
+    summary.total_fixes = fixes.len();
+    summary.warnings_count = warnings.len();
+
+    Ok(HttpResponse::Ok().json(AutofixResponse {
+        trees: rows,
+        fixes,
+        warnings,
+        summary,
+    }))
 }
 
 /// Per-stand summary for the web API response.
@@ -887,6 +1140,7 @@ mod tests {
             .route("/health", web::get().to(health))
             .route("/api/upload", web::post().to(upload))
             .route("/api/validate", web::post().to(validate_and_submit))
+            .route("/api/autofix", web::post().to(autofix))
             .route("/api/{id}/metrics", web::get().to(metrics))
             .route("/api/{id}/statistics", web::get().to(statistics))
             .route("/api/{id}/distribution", web::get().to(distribution))
@@ -1334,5 +1588,230 @@ mod tests {
         assert_eq!(resp.status(), 200);
         let body: serde_json::Value = actix_test::read_body_json(resp).await;
         assert_eq!(body["status"], "ok");
+    }
+
+    // -----------------------------------------------------------------------
+    // Auto-fix endpoint
+    // -----------------------------------------------------------------------
+
+    fn make_row(overrides: impl FnOnce(&mut EditableTreeRow)) -> EditableTreeRow {
+        let mut row = EditableTreeRow {
+            row_index: 0,
+            plot_id: 1,
+            tree_id: 1,
+            species_code: "DF".to_string(),
+            species_name: "Douglas Fir".to_string(),
+            dbh: 14.0,
+            height: Some(90.0),
+            crown_ratio: Some(0.5),
+            status: "Live".to_string(),
+            expansion_factor: 5.0,
+            age: Some(60),
+            defect: None,
+            plot_size_acres: Some(0.2),
+            slope_percent: None,
+            aspect_degrees: None,
+            elevation_ft: None,
+        };
+        overrides(&mut row);
+        row
+    }
+
+    async fn run_autofix(rows: Vec<EditableTreeRow>) -> serde_json::Value {
+        let state = super::super::state::AppState::new_in_memory().unwrap();
+        let id = Uuid::new_v4();
+        state
+            .insert_pending(id, "test.csv".to_string(), rows.clone())
+            .unwrap();
+
+        let app = actix_test::init_service(make_app(state)).await;
+        let req = actix_test::TestRequest::post()
+            .uri("/api/autofix")
+            .set_json(serde_json::json!({ "id": id, "trees": rows }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 200);
+        actix_test::read_body_json(resp).await
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_unknown_id_returns_404() {
+        let state = super::super::state::AppState::new_in_memory().unwrap();
+        let app = actix_test::init_service(make_app(state)).await;
+
+        let req = actix_test::TestRequest::post()
+            .uri("/api/autofix")
+            .set_json(serde_json::json!({
+                "id": Uuid::new_v4(),
+                "trees": []
+            }))
+            .to_request();
+        let resp = actix_test::call_service(&app, req).await;
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_clean_data_no_fixes() {
+        let body = run_autofix(valid_rows()).await;
+        assert_eq!(body["summary"]["total_fixes"], 0);
+        assert_eq!(body["fixes"].as_array().unwrap().len(), 0);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_negative_dbh() {
+        let body = run_autofix(vec![make_row(|r| r.dbh = -14.0)]).await;
+        let fixes = body["fixes"].as_array().unwrap();
+        assert!(fixes.iter().any(|f| f["field"] == "dbh" && f["fixed"] == "14"));
+        assert_eq!(body["trees"][0]["dbh"], 14.0);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_negative_height() {
+        let body = run_autofix(vec![make_row(|r| r.height = Some(-90.0))]).await;
+        let fixes = body["fixes"].as_array().unwrap();
+        assert!(fixes.iter().any(|f| f["field"] == "height"));
+        assert_eq!(body["trees"][0]["height"], 90.0);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_crown_ratio_percentage() {
+        let body = run_autofix(vec![make_row(|r| r.crown_ratio = Some(50.0))]).await;
+        let fixes = body["fixes"].as_array().unwrap();
+        assert!(fixes.iter().any(|f| f["field"] == "crown_ratio"));
+        let cr = body["trees"][0]["crown_ratio"].as_f64().unwrap();
+        assert!((cr - 0.5).abs() < 0.01);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_defect_percentage() {
+        let body = run_autofix(vec![make_row(|r| r.defect = Some(25.0))]).await;
+        let fixes = body["fixes"].as_array().unwrap();
+        assert!(fixes.iter().any(|f| f["field"] == "defect"));
+        let d = body["trees"][0]["defect"].as_f64().unwrap();
+        assert!((d - 0.25).abs() < 0.01);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_status_normalization() {
+        let body = run_autofix(vec![make_row(|r| r.status = "alive".to_string())]).await;
+        let fixes = body["fixes"].as_array().unwrap();
+        assert!(fixes.iter().any(|f| f["field"] == "status" && f["fixed"] == "Live"));
+        assert_eq!(body["trees"][0]["status"], "Live");
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_status_snag_to_dead() {
+        let body = run_autofix(vec![make_row(|r| r.status = "snag".to_string())]).await;
+        assert_eq!(body["trees"][0]["status"], "Dead");
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_species_whitespace() {
+        let body = run_autofix(vec![make_row(|r| {
+            r.species_code = "  df ".to_string();
+            r.species_name = " Douglas Fir  ".to_string();
+        })])
+        .await;
+        assert_eq!(body["trees"][0]["species_code"], "DF");
+        assert_eq!(body["trees"][0]["species_name"], "Douglas Fir");
+        assert!(body["summary"]["whitespace_trimmed"].as_u64().unwrap() >= 2);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_height_over_300_decimal_error() {
+        // 950 ft is implausible — dividing by 10 gives 95 ft, which is reasonable
+        let body = run_autofix(vec![make_row(|r| r.height = Some(950.0))]).await;
+        let h = body["trees"][0]["height"].as_f64().unwrap();
+        assert!((h - 95.0).abs() < 0.1);
+        assert_eq!(body["summary"]["heights_corrected"], 1);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_unreasonable_dbh_warns() {
+        // Single row with 200" DBH — can't confidently determine if it's cm
+        // without more context, so should warn rather than fix
+        let body = run_autofix(vec![make_row(|r| r.dbh = 200.0)]).await;
+        let warnings = body["warnings"].as_array().unwrap();
+        assert!(warnings.iter().any(|w| w["field"] == "dbh"));
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_negative_expansion_factor() {
+        let body = run_autofix(vec![make_row(|r| r.expansion_factor = -5.0)]).await;
+        assert_eq!(body["trees"][0]["expansion_factor"], 5.0);
+        assert!(body["summary"]["signs_corrected"].as_u64().unwrap() >= 1);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_duplicate_tree_ids_warned() {
+        let rows = vec![
+            make_row(|r| {
+                r.row_index = 0;
+                r.tree_id = 1;
+                r.plot_id = 1;
+            }),
+            make_row(|r| {
+                r.row_index = 1;
+                r.tree_id = 1;
+                r.plot_id = 1;
+            }),
+        ];
+        let body = run_autofix(rows).await;
+        let warnings = body["warnings"].as_array().unwrap();
+        assert!(warnings
+            .iter()
+            .any(|w| w["field"] == "tree_id" && w["message"].as_str().unwrap().contains("Duplicate")));
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_duplicate_tree_ids_different_plots_ok() {
+        let rows = vec![
+            make_row(|r| {
+                r.row_index = 0;
+                r.tree_id = 1;
+                r.plot_id = 1;
+            }),
+            make_row(|r| {
+                r.row_index = 1;
+                r.tree_id = 1;
+                r.plot_id = 2;
+            }),
+        ];
+        let body = run_autofix(rows).await;
+        let warnings = body["warnings"].as_array().unwrap();
+        assert!(warnings.is_empty() || !warnings.iter().any(|w| w["field"] == "tree_id"));
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_multiple_issues_combined() {
+        let body = run_autofix(vec![make_row(|r| {
+            r.dbh = -14.0;
+            r.crown_ratio = Some(50.0);
+            r.status = "alive".to_string();
+            r.species_code = " df ".to_string();
+        })])
+        .await;
+        let summary = &body["summary"];
+        assert!(summary["total_fixes"].as_u64().unwrap() >= 4);
+        assert!(summary["signs_corrected"].as_u64().unwrap() >= 1);
+        assert!(summary["units_converted"].as_u64().unwrap() >= 1);
+        assert!(summary["status_normalized"].as_u64().unwrap() >= 1);
+        assert!(summary["whitespace_trimmed"].as_u64().unwrap() >= 1);
+    }
+
+    #[actix_web::test]
+    async fn test_autofix_confidence_levels_present() {
+        let body = run_autofix(vec![make_row(|r| {
+            r.dbh = -14.0;
+            r.height = Some(950.0);
+        })])
+        .await;
+        let fixes = body["fixes"].as_array().unwrap();
+        // Negative DBH fix should be high confidence
+        let dbh_fix = fixes.iter().find(|f| f["field"] == "dbh").unwrap();
+        assert_eq!(dbh_fix["confidence"], "high");
+        // Height correction should be medium confidence (heuristic)
+        let height_fix = fixes.iter().find(|f| f["field"] == "height").unwrap();
+        assert_eq!(height_fix["confidence"], "medium");
     }
 }

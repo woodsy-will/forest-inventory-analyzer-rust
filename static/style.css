@@ -788,12 +788,73 @@ tbody tr:hover {
     vertical-align: middle;
 }
 
+.autofix-hint {
+    padding: 0.5rem 0.85rem;
+    background: #fff3bf;
+    color: #7c5e00;
+    border: 1px solid #ffd43b;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    margin-bottom: 0.5rem;
+}
+
 .autofix-banner {
-    padding: 0.65rem 1rem;
+    position: relative;
+    padding: 0.75rem 2rem 0.75rem 1rem;
     border-radius: var(--radius-sm);
     font-size: 0.82rem;
     line-height: 1.5;
     margin-top: 0.75rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.autofix-banner .autofix-header {
+    margin-bottom: 0.3rem;
+}
+
+.autofix-banner .autofix-review {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(0,0,0,0.1);
+}
+
+.autofix-banner .autofix-warnings {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    color: #b45309;
+}
+
+.autofix-banner ul {
+    margin: 0.25rem 0 0 1.2rem;
+    padding: 0;
+}
+
+.autofix-banner li {
+    margin-bottom: 0.15rem;
+}
+
+.autofix-warning-item:hover {
+    text-decoration: underline;
+}
+
+.autofix-dismiss {
+    position: absolute;
+    top: 0.4rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    font-size: 1.1rem;
+    cursor: pointer;
+    color: inherit;
+    opacity: 0.6;
+    padding: 0.1rem 0.3rem;
+    line-height: 1;
+}
+
+.autofix-dismiss:hover {
+    opacity: 1;
 }
 
 .autofix-success {
@@ -824,6 +885,18 @@ tbody tr:hover {
 .fixed-cell select:focus {
     border-color: #2b8a3e;
     box-shadow: 0 0 0 2px rgba(43, 138, 62, 0.2);
+}
+
+.fixed-cell-review input,
+.fixed-cell-review select {
+    border-color: #fcc419;
+    background: #fff9db;
+}
+
+.fixed-cell-review input:focus,
+.fixed-cell-review select:focus {
+    border-color: #e67700;
+    box-shadow: 0 0 0 2px rgba(230, 119, 0, 0.2);
 }
 
 /* ============ Responsive ============ */

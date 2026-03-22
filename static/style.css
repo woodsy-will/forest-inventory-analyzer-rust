@@ -750,6 +750,82 @@ tbody tr:hover {
     display: block;
 }
 
+/* ============ Auto-Fix ============ */
+.btn-autofix {
+    padding: 0.5rem 1.25rem;
+    background: #e67700;
+    color: white;
+    border: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: inherit;
+    transition: all var(--transition);
+}
+
+.btn-autofix:hover {
+    background: #d9480f;
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
+}
+
+.btn-autofix.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.btn-autofix.loading::after {
+    content: '';
+    display: inline-block;
+    width: 0.85em;
+    height: 0.85em;
+    margin-left: 0.5em;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    vertical-align: middle;
+}
+
+.autofix-banner {
+    padding: 0.65rem 1rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    line-height: 1.5;
+    margin-top: 0.75rem;
+}
+
+.autofix-success {
+    background: #d3f9d8;
+    color: #1b4332;
+    border: 1px solid #69db7c;
+}
+
+.autofix-info {
+    background: #fff3bf;
+    color: #7c5e00;
+    border: 1px solid #ffd43b;
+}
+
+.autofix-error {
+    background: var(--error-bg);
+    color: var(--error);
+    border: 1px solid var(--error);
+}
+
+.fixed-cell input,
+.fixed-cell select {
+    border-color: #69db7c;
+    background: #d3f9d8;
+}
+
+.fixed-cell input:focus,
+.fixed-cell select:focus {
+    border-color: #2b8a3e;
+    box-shadow: 0 0 0 2px rgba(43, 138, 62, 0.2);
+}
+
 /* ============ Responsive ============ */
 @media (max-width: 1024px) {
     .metric-cards {

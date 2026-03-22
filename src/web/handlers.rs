@@ -313,6 +313,188 @@ pub async fn validate_and_submit(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Auto-fix endpoint
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct AutofixRequest {
+    id: Uuid,
+    trees: Vec<EditableTreeRow>,
+}
+
+/// Description of a single auto-fix that was applied.
+#[derive(Serialize)]
+struct AutofixAction {
+    row_index: usize,
+    field: String,
+    original: String,
+    fixed: String,
+    reason: String,
+}
+
+#[derive(Serialize)]
+struct AutofixResponse {
+    trees: Vec<EditableTreeRow>,
+    fixes: Vec<AutofixAction>,
+}
+
+/// Attempt to normalize a status string to a valid TreeStatus value.
+/// Returns the canonical Display form (e.g. "Live") or None if unrecognizable.
+fn normalize_status(s: &str) -> Option<&'static str> {
+    let lower = s.trim().to_lowercase();
+    match lower.as_str() {
+        "live" | "l" | "alive" | "living" | "1" => Some("Live"),
+        "dead" | "d" | "snag" | "standing dead" | "2" => Some("Dead"),
+        "cut" | "c" | "harvested" | "stump" | "3" => Some("Cut"),
+        "missing" | "m" | "not found" | "4" => Some("Missing"),
+        _ => None,
+    }
+}
+
+pub async fn autofix(
+    state: web::Data<AppState>,
+    body: web::Json<AutofixRequest>,
+) -> Result<HttpResponse, WebError> {
+    // Reject requests for unknown IDs
+    if !state.has_pending(&body.id)? {
+        return Ok(HttpResponse::NotFound().json(ErrorBody {
+            error: "Not Found".to_string(),
+            details: format!("No pending upload found for id {}", body.id),
+        }));
+    }
+
+    let mut rows = body.trees.clone();
+    let mut fixes = Vec::new();
+
+    for row in &mut rows {
+        let ri = row.row_index;
+
+        // --- Status normalization ---
+        if row.status.parse::<TreeStatus>().is_err() {
+            if let Some(canonical) = normalize_status(&row.status) {
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "status".to_string(),
+                    original: row.status.clone(),
+                    fixed: canonical.to_string(),
+                    reason: format!("Normalized '{}' to '{}'", row.status, canonical),
+                });
+                row.status = canonical.to_string();
+            }
+        }
+
+        // --- Negative DBH → absolute value ---
+        if row.dbh < 0.0 {
+            let fixed = row.dbh.abs();
+            fixes.push(AutofixAction {
+                row_index: ri,
+                field: "dbh".to_string(),
+                original: format!("{}", row.dbh),
+                fixed: format!("{}", fixed),
+                reason: "Converted negative DBH to absolute value".to_string(),
+            });
+            row.dbh = fixed;
+        }
+
+        // --- Negative height → absolute value ---
+        if let Some(h) = row.height {
+            if h < 0.0 {
+                let fixed = h.abs();
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "height".to_string(),
+                    original: format!("{}", h),
+                    fixed: format!("{}", fixed),
+                    reason: "Converted negative height to absolute value".to_string(),
+                });
+                row.height = Some(fixed);
+            }
+        }
+
+        // --- Crown ratio: convert percentage to proportion ---
+        if let Some(cr) = row.crown_ratio {
+            if cr > 1.0 && cr <= 100.0 {
+                let fixed = cr / 100.0;
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "crown_ratio".to_string(),
+                    original: format!("{}", cr),
+                    fixed: format!("{:.4}", fixed),
+                    reason: format!(
+                        "Converted crown ratio from percentage ({}) to proportion ({:.4})",
+                        cr, fixed
+                    ),
+                });
+                row.crown_ratio = Some(fixed);
+            } else if cr < 0.0 {
+                let fixed = cr.abs();
+                let fixed = if fixed > 1.0 && fixed <= 100.0 {
+                    fixed / 100.0
+                } else {
+                    fixed
+                };
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "crown_ratio".to_string(),
+                    original: format!("{}", cr),
+                    fixed: format!("{:.4}", fixed),
+                    reason: "Corrected negative crown ratio".to_string(),
+                });
+                row.crown_ratio = Some(fixed);
+            }
+        }
+
+        // --- Negative expansion factor → absolute value ---
+        if row.expansion_factor < 0.0 {
+            let fixed = row.expansion_factor.abs();
+            fixes.push(AutofixAction {
+                row_index: ri,
+                field: "expansion_factor".to_string(),
+                original: format!("{}", row.expansion_factor),
+                fixed: format!("{}", fixed),
+                reason: "Converted negative expansion factor to absolute value".to_string(),
+            });
+            row.expansion_factor = fixed;
+        }
+
+        // --- Defect: convert percentage to proportion ---
+        if let Some(d) = row.defect {
+            if d > 1.0 && d <= 100.0 {
+                let fixed = d / 100.0;
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "defect".to_string(),
+                    original: format!("{}", d),
+                    fixed: format!("{:.4}", fixed),
+                    reason: format!(
+                        "Converted defect from percentage ({}) to proportion ({:.4})",
+                        d, fixed
+                    ),
+                });
+                row.defect = Some(fixed);
+            } else if d < 0.0 {
+                let fixed = d.abs();
+                let fixed = if fixed > 1.0 && fixed <= 100.0 {
+                    fixed / 100.0
+                } else {
+                    fixed
+                };
+                fixes.push(AutofixAction {
+                    row_index: ri,
+                    field: "defect".to_string(),
+                    original: format!("{}", d),
+                    fixed: format!("{:.4}", fixed),
+                    reason: "Corrected negative defect value".to_string(),
+                });
+                row.defect = Some(fixed);
+            }
+        }
+    }
+
+    Ok(HttpResponse::Ok().json(AutofixResponse { trees: rows, fixes }))
+}
+
 /// Per-stand summary for the web API response.
 #[derive(Serialize)]
 struct StandSummary {

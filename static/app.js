@@ -623,6 +623,66 @@ function collectTableData() {
     return rows;
 }
 
+async function autofixData() {
+    const btn = document.getElementById('autofix-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    const trees = collectTableData();
+    try {
+        const res = await fetch('/api/autofix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentId, trees })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.details || err.error);
+        }
+        const data = await res.json();
+
+        if (data.fixes.length === 0) {
+            showAutofixBanner('No auto-fixable issues found. Please correct the remaining errors manually.', 'info');
+        } else {
+            // Update the table with fixed data
+            renderEditTable(data.trees);
+            highlightFixedCells(data.fixes);
+            showAutofixBanner(
+                data.fixes.length + ' fix' + (data.fixes.length !== 1 ? 'es' : '') +
+                ' applied: ' + data.fixes.map(f =>
+                    'Row ' + (f.row_index + 1) + ' ' + f.field + ' \u2014 ' + f.reason
+                ).join('; '),
+                'success'
+            );
+        }
+    } catch (e) {
+        showAutofixBanner('Auto-fix error: ' + e.message, 'error');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function showAutofixBanner(message, type) {
+    const banner = document.getElementById('autofix-banner');
+    banner.textContent = message;
+    banner.hidden = false;
+    banner.className = 'autofix-banner autofix-' + type;
+    setTimeout(() => { banner.hidden = true; }, 10000);
+}
+
+function highlightFixedCells(fixes) {
+    for (const fix of fixes) {
+        const td = document.querySelector(
+            `#edit-table-body tr[data-row="${fix.row_index}"] td[data-field="${fix.field}"]`
+        );
+        if (td) {
+            td.classList.add('fixed-cell');
+            setTimeout(() => td.classList.remove('fixed-cell'), 5000);
+        }
+    }
+}
+
 async function revalidateData() {
     const btn = document.getElementById('validate-btn');
     btn.classList.add('loading');
@@ -679,6 +739,7 @@ function startOver() {
 // Expose to HTML onclick handlers
 window.runGrowth = runGrowth;
 window.exportData = exportData;
+window.autofixData = autofixData;
 window.revalidateData = revalidateData;
 window.startOver = startOver;
 window.loadStatistics = loadStatistics;

@@ -8,63 +8,229 @@
     <script src="/chart.min.js"></script>
 </head>
 <body>
-    <header>
-        <div class="header-brand">
-            <svg class="header-logo" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18 3L8 16h5l-4 8h6l-5 9h16l-5-9h6l-4-8h5L18 3z" fill="#74c69d" opacity="0.9"/>
-                <rect x="16" y="28" width="4" height="5" rx="1" fill="#b7e4c7"/>
-            </svg>
-            <div>
-                <h1>Forest Inventory Analyzer</h1>
-                <p class="subtitle">Stand metrics, species composition & growth projections</p>
+    <!-- ======== Navigation ======== -->
+    <nav id="site-nav">
+        <div class="nav-inner">
+            <a href="#" class="nav-brand" onclick="scrollToTop(); return false;">
+                <svg class="nav-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <!-- Layered tree -->
+                    <path d="M20 4l-8 10h4l-5 8h5l-4 7h16l-4-7h5l-5-8h4L20 4z" fill="#74c69d" opacity="0.85"/>
+                    <path d="M20 8l-5 7h3l-3.5 6h3.5l-3 5.5h10l-3-5.5h3.5L22 15h3L20 8z" fill="#b7e4c7" opacity="0.5"/>
+                    <!-- Trunk with rings -->
+                    <rect x="17.5" y="29" width="5" height="7" rx="1.5" fill="#8B7355"/>
+                    <ellipse cx="20" cy="32" rx="1.8" ry="1.2" fill="none" stroke="#a08b6e" stroke-width="0.5" opacity="0.6"/>
+                </svg>
+                <span class="nav-title">Forest Inventory Analyzer</span>
+            </a>
+            <div class="nav-actions">
+                <button class="btn-nav" id="btn-new-analysis" onclick="startOver()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3.2-6.9"/><polyline points="3 4 3 9 8 9"/></svg>
+                    New Analysis
+                </button>
             </div>
         </div>
-        <div class="header-actions">
-            <button class="btn-header" id="btn-new-analysis" onclick="startOver()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3.2-6.9"/><polyline points="3 4 3 9 8 9"/></svg>
-                New Analysis
-            </button>
+    </nav>
+
+    <!-- ======== Hero / Landing ======== -->
+    <section id="landing" class="hero">
+        <div class="hero-bg">
+            <!-- CSS-only layered forest silhouette -->
+            <div class="hero-mountain"></div>
+            <div class="hero-treeline hero-treeline--far"></div>
+            <div class="hero-treeline hero-treeline--mid"></div>
+            <div class="hero-treeline hero-treeline--near"></div>
+            <div class="hero-fog"></div>
         </div>
-    </header>
+        <div class="hero-content">
+            <p class="hero-eyebrow">Timber Cruise Analysis Tool</p>
+            <h1 class="hero-title">Forest Inventory<br>Analyzer</h1>
+            <p class="hero-subtitle">
+                Upload cruise data. Get stand metrics, species composition, diameter distributions,
+                sampling statistics, and growth projections &mdash; instantly.
+            </p>
+            <div class="hero-cta">
+                <button class="btn-hero" onclick="document.getElementById('upload-section').scrollIntoView({behavior:'smooth'})">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    Upload Inventory Data
+                </button>
+                <a href="#features" class="btn-hero-outline" onclick="event.preventDefault(); document.getElementById('features').scrollIntoView({behavior:'smooth'})">
+                    Learn More
+                </a>
+            </div>
+        </div>
+        <!-- Floating stat badges -->
+        <div class="hero-badges">
+            <div class="hero-badge">
+                <span class="hero-badge-num">5</span>
+                <span class="hero-badge-label">Key Metrics</span>
+            </div>
+            <div class="hero-badge">
+                <span class="hero-badge-num">3</span>
+                <span class="hero-badge-label">Growth Models</span>
+            </div>
+            <div class="hero-badge">
+                <span class="hero-badge-num">4</span>
+                <span class="hero-badge-label">Export Formats</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ======== Features ======== -->
+    <section id="features" class="features-section">
+        <div class="section-inner">
+            <h2 class="section-heading">What You Get</h2>
+            <p class="section-subheading">From raw cruise data to publication-ready analysis in seconds</p>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Tree ring icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="18" stroke="#52b788" stroke-width="1.5"/><circle cx="24" cy="24" r="13" stroke="#74c69d" stroke-width="1.5"/><circle cx="24" cy="24" r="8" stroke="#95d5b2" stroke-width="1.5"/><circle cx="24" cy="24" r="3" fill="#2d6a4f"/></svg>
+                    </div>
+                    <h3>Stand Metrics</h3>
+                    <p>Trees per acre, basal area, cubic &amp; board foot volume, and quadratic mean diameter computed per acre.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Species bars icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><rect x="6" y="28" width="8" height="14" rx="2" fill="#1b4332"/><rect x="17" y="18" width="8" height="24" rx="2" fill="#2d6a4f"/><rect x="28" y="10" width="8" height="32" rx="2" fill="#52b788"/><rect x="6" y="6" width="36" height="2" rx="1" fill="#b7e4c7" opacity="0.4"/></svg>
+                    </div>
+                    <h3>Species Composition</h3>
+                    <p>Basal area and TPA breakdown by species with interactive horizontal bar charts.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Bell curve / distribution icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><rect x="8" y="30" width="5" height="12" rx="1" fill="#95d5b2"/><rect x="15" y="22" width="5" height="20" rx="1" fill="#74c69d"/><rect x="22" y="14" width="5" height="28" rx="1" fill="#52b788"/><rect x="29" y="20" width="5" height="22" rx="1" fill="#74c69d"/><rect x="36" y="28" width="5" height="14" rx="1" fill="#95d5b2"/></svg>
+                    </div>
+                    <h3>Diameter Distribution</h3>
+                    <p>Histogram of DBH classes with dual-axis TPA and basal area display.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Confidence interval icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><line x1="10" y1="24" x2="38" y2="24" stroke="#2d6a4f" stroke-width="2"/><line x1="10" y1="20" x2="10" y2="28" stroke="#2d6a4f" stroke-width="2"/><line x1="38" y1="20" x2="38" y2="28" stroke="#2d6a4f" stroke-width="2"/><circle cx="24" cy="24" r="4" fill="#52b788"/><text x="24" y="15" text-anchor="middle" font-size="8" fill="#1b4332" font-weight="600">95%</text></svg>
+                    </div>
+                    <h3>Sampling Statistics</h3>
+                    <p>Confidence intervals via Student's t-distribution at 90%, 95%, or 99% confidence.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Growth curve icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><path d="M8 38 Q16 36 22 28 Q28 20 34 16 Q38 14 42 12" stroke="#52b788" stroke-width="2.5" fill="none" stroke-linecap="round"/><circle cx="42" cy="12" r="2.5" fill="#1b4332"/><line x1="8" y1="8" x2="8" y2="40" stroke="#b7e4c7" stroke-width="1"/><line x1="6" y1="40" x2="44" y2="40" stroke="#b7e4c7" stroke-width="1"/></svg>
+                    </div>
+                    <h3>Growth Projections</h3>
+                    <p>Exponential, logistic, and linear growth models with configurable mortality rates.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <!-- Wrench / auto-fix icon -->
+                        <svg viewBox="0 0 48 48" fill="none"><path d="M30 10a10 10 0 0 0-14 14l14 14a10 10 0 0 0 0-14l-14-14z" fill="#d8f3dc" stroke="#52b788" stroke-width="1.5"/><path d="M18 18l12 12" stroke="#2d6a4f" stroke-width="2" stroke-linecap="round"/><circle cx="18" cy="18" r="2" fill="#2d6a4f"/></svg>
+                    </div>
+                    <h3>Smart Auto-Fix</h3>
+                    <p>Automatic detection and correction of unit errors, negative values, and data entry issues with confidence levels.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ======== How It Works ======== -->
+    <section id="how-it-works" class="how-section">
+        <div class="section-inner">
+            <h2 class="section-heading">How It Works</h2>
+            <div class="steps">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <h3>Upload</h3>
+                        <p>Drop your CSV, JSON, Excel, or Survey123 cruise export.</p>
+                    </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <h3>Review & Fix</h3>
+                        <p>Auto-fix catches common errors. Edit any remaining issues in the inline editor.</p>
+                    </div>
+                </div>
+                <div class="step-connector"></div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <h3>Analyze</h3>
+                        <p>Get instant stand metrics, charts, statistics, and growth projections. Export anywhere.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <main>
-        <!-- Upload Section -->
+        <!-- ======== Upload Section ======== -->
         <section id="upload-section">
-            <div id="drop-zone" class="drop-zone">
-                <div class="drop-zone-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1b4332" stroke-width="2">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                        <polyline points="17 8 12 3 7 8"/>
-                        <line x1="12" y1="3" x2="12" y2="15"/>
-                    </svg>
-                </div>
-                <div class="drop-zone-content">
+            <div class="upload-area">
+                <div class="topo-accent"></div>
+                <h2 class="upload-heading">Start Your Analysis</h2>
+                <div id="drop-zone" class="drop-zone">
+                    <div class="drop-zone-ring">
+                        <svg class="drop-zone-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="17 8 12 3 7 8"/>
+                            <line x1="12" y1="3" x2="12" y2="15"/>
+                        </svg>
+                    </div>
                     <h3>Upload Inventory Data</h3>
-                    <p>Drag & drop a file here, or click to browse</p>
+                    <p>Drag &amp; drop a file here, or click to browse</p>
                     <p class="hint">CSV, JSON, Excel (.xlsx), or Survey123 cruise exports</p>
+                    <input type="file" id="file-input" accept=".csv,.json,.xlsx,.xls" hidden>
                 </div>
-                <input type="file" id="file-input" accept=".csv,.json,.xlsx,.xls" hidden>
+                <div id="upload-progress" class="upload-progress">
+                    <div class="spinner"></div>
+                    <div class="upload-progress-text">Processing <strong id="upload-filename"></strong>...</div>
+                </div>
+                <div id="upload-error" class="error-message" hidden></div>
             </div>
-            <div id="upload-progress" class="upload-progress">
-                <div class="spinner"></div>
-                <div class="upload-progress-text">Processing <strong id="upload-filename"></strong>...</div>
-            </div>
-            <div id="upload-error" class="error-message" hidden></div>
         </section>
 
-        <!-- Error Editor -->
+        <!-- ======== Error Editor ======== -->
         <section id="error-editor" hidden aria-label="Data validation editor">
             <div class="error-editor-card">
                 <div class="error-summary-bar">
                     <span class="error-count" id="error-count" aria-live="polite">0 errors found</span>
                     <div class="error-editor-actions">
-                        <button class="btn-autofix" id="autofix-btn" onclick="autofixData()">Auto-Fix Issues</button>
-                        <button class="btn-primary" id="validate-btn" onclick="revalidateData()">Validate & Save</button>
+                        <button class="btn-autofix" id="autofix-btn" onclick="autofixData()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                            Auto-Fix Issues
+                        </button>
+                        <button class="btn-undo" id="undo-autofix-btn" onclick="undoAutofix()" hidden>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 1 3.2-6.9"/><polyline points="3 4 3 9 8 9"/></svg>
+                            Undo Fixes
+                        </button>
+                        <button class="btn-primary" id="validate-btn" onclick="revalidateData()">Validate &amp; Save</button>
                         <button class="btn-secondary" onclick="startOver()">Start Over</button>
                     </div>
-                    <div id="autofix-banner" class="autofix-banner" hidden></div>
                 </div>
                 <div id="autofix-hint" class="autofix-hint" hidden></div>
+                <!-- Autofix preview panel (shown after scanning, before applying) -->
+                <div id="autofix-preview" class="autofix-preview" hidden>
+                    <div class="autofix-preview-header">
+                        <h3 id="autofix-preview-title">Proposed Fixes</h3>
+                        <div class="autofix-preview-actions">
+                            <span class="autofix-selection-count" id="autofix-selection-count"></span>
+                            <button class="btn-sm btn-link" onclick="autofixSelectByConfidence('all')">Select All</button>
+                            <button class="btn-sm btn-link" onclick="autofixSelectByConfidence('none')">Deselect All</button>
+                            <button class="btn-sm btn-link" onclick="autofixSelectByConfidence('high')">High Only</button>
+                            <button class="btn-sm btn-link" onclick="autofixSelectByConfidence('high,medium')">High + Medium</button>
+                        </div>
+                    </div>
+                    <div id="autofix-categories" class="autofix-categories"></div>
+                    <div id="autofix-warnings-panel" class="autofix-warnings-panel" hidden></div>
+                    <div class="autofix-preview-footer">
+                        <button class="btn-primary" id="autofix-apply-btn" onclick="applySelectedFixes()">Apply Selected Fixes</button>
+                        <button class="btn-secondary" onclick="closeAutofixPreview()">Cancel</button>
+                    </div>
+                </div>
+                <div id="autofix-banner" class="autofix-banner" hidden></div>
                 <div class="error-list" id="error-list" role="list" aria-label="Validation errors"></div>
                 <div class="edit-table-wrapper">
                     <table class="edit-table" id="edit-table">
@@ -76,7 +242,7 @@
             </div>
         </section>
 
-        <!-- Dashboard -->
+        <!-- ======== Dashboard ======== -->
         <section id="dashboard" hidden>
             <div class="summary-bar">
                 <div class="summary-info">
@@ -96,26 +262,31 @@
 
             <div class="metric-cards">
                 <div class="metric-card">
+                    <div class="metric-icon-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
                     <div class="metric-label">Trees per Acre</div>
                     <div class="metric-value" id="metric-tpa">--</div>
                     <div class="metric-unit">TPA</div>
                 </div>
                 <div class="metric-card">
+                    <div class="metric-icon-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
                     <div class="metric-label">Basal Area</div>
                     <div class="metric-value" id="metric-ba">--</div>
                     <div class="metric-unit">ft&sup2;/acre</div>
                 </div>
                 <div class="metric-card">
+                    <div class="metric-icon-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
                     <div class="metric-label">Volume</div>
                     <div class="metric-value" id="metric-vol-cuft">--</div>
                     <div class="metric-unit">ft&sup3;/acre</div>
                 </div>
                 <div class="metric-card">
+                    <div class="metric-icon-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-2"/></svg></div>
                     <div class="metric-label">Board Feet</div>
                     <div class="metric-value" id="metric-vol-bdft">--</div>
                     <div class="metric-unit">bd ft/acre</div>
                 </div>
                 <div class="metric-card">
+                    <div class="metric-icon-ring"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><circle cx="12" cy="12" r="4"/></svg></div>
                     <div class="metric-label">QMD</div>
                     <div class="metric-value" id="metric-qmd">--</div>
                     <div class="metric-unit">inches</div>
@@ -194,6 +365,25 @@
             </div>
         </section>
     </main>
+
+    <!-- ======== Footer ======== -->
+    <footer id="site-footer">
+        <div class="footer-inner">
+            <div class="footer-brand">
+                <svg class="footer-logo" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 4l-8 10h4l-5 8h5l-4 7h16l-4-7h5l-5-8h4L20 4z" fill="#52b788" opacity="0.6"/>
+                    <rect x="17.5" y="29" width="5" height="7" rx="1.5" fill="#8B7355" opacity="0.6"/>
+                </svg>
+                <div>
+                    <strong>Forest Inventory Analyzer</strong>
+                    <p>Open-source timber cruise analysis</p>
+                </div>
+            </div>
+            <div class="footer-links">
+                <span>CSV &middot; JSON &middot; Excel &middot; GeoJSON</span>
+            </div>
+        </div>
+    </footer>
 
     <script src="/app.js"></script>
 </body>

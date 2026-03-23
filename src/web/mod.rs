@@ -65,6 +65,7 @@ pub async fn start_server(config: AppConfig) -> std::io::Result<()> {
                 "/api/validate",
                 web::post().to(handlers::validate_and_submit),
             )
+            .route("/api/autofix", web::post().to(handlers::autofix))
             .route("/api/{id}/metrics", web::get().to(handlers::metrics))
             .route("/api/{id}/statistics", web::get().to(handlers::statistics))
             .route(

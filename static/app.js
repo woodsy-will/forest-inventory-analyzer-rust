@@ -471,10 +471,28 @@ function showErrorEditor(data) {
     document.getElementById('dashboard').hidden = true;
     document.getElementById('error-editor').hidden = false;
     document.getElementById('btn-new-analysis').classList.add('visible');
+    document.getElementById('autofix-banner').hidden = true;
 
     renderErrorList(data.errors);
     renderEditTable(data.trees);
     highlightErrorCells(data.errors);
+
+    // Hint to the user that auto-fix may help
+    const fixablePatterns = [
+        /negative/i, /must be positive/i, /must be in 0\.0/i,
+        /Unknown tree status/i,
+    ];
+    const fixable = data.errors.filter(e =>
+        fixablePatterns.some(p => p.test(e.message))
+    ).length;
+    const hint = document.getElementById('autofix-hint');
+    if (fixable > 0) {
+        hint.textContent = fixable + ' issue' + (fixable !== 1 ? 's' : '') +
+            ' may be auto-fixable \u2014 try "Auto-Fix Issues" above';
+        hint.hidden = false;
+    } else {
+        hint.hidden = true;
+    }
 }
 
 function renderErrorList(errors) {
@@ -623,6 +641,334 @@ function collectTableData() {
     return rows;
 }
 
+// ---------------------------------------------------------------------------
+// Auto-fix: preview-and-select workflow
+// ---------------------------------------------------------------------------
+
+// Holds the last autofix response so we can apply selected fixes
+let pendingAutofixData = null;
+// Snapshot of table data before fixes were applied (for undo)
+let preFixSnapshot = null;
+
+// Categorize a fix by its field/reason into a human-readable group
+function fixCategory(fix) {
+    if (fix.field === 'species_code' || fix.field === 'species_name') return 'whitespace';
+    if (fix.field === 'status') return 'status';
+    if (fix.reason.toLowerCase().includes('negative') || fix.reason.toLowerCase().includes('absolute')) return 'signs';
+    if (fix.reason.toLowerCase().includes('percentage') || fix.reason.toLowerCase().includes('proportion')) return 'units';
+    if (fix.field === 'height') return 'heights';
+    if (fix.field === 'dbh' && fix.reason.toLowerCase().includes('centimeter')) return 'dbh_units';
+    return 'other';
+}
+
+const CATEGORY_LABELS = {
+    whitespace: 'Whitespace & Case',
+    status: 'Status Normalization',
+    signs: 'Sign Corrections',
+    units: 'Unit Conversions (% \u2192 proportion)',
+    heights: 'Height Corrections',
+    dbh_units: 'DBH Unit Conversions (cm \u2192 in)',
+    other: 'Other Fixes',
+};
+
+const CONFIDENCE_COLORS = {
+    high: '#2b8a3e',
+    medium: '#e67700',
+    low: '#c92a2a',
+};
+
+async function autofixData() {
+    const btn = document.getElementById('autofix-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    const trees = collectTableData();
+    try {
+        const res = await fetch('/api/autofix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: currentId, trees })
+        });
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.details || err.error);
+        }
+        const data = await res.json();
+        pendingAutofixData = data;
+
+        if (data.fixes.length === 0 && data.warnings.length === 0) {
+            showAutofixBanner('No auto-fixable issues found. Please correct the remaining errors manually.', 'info');
+            return;
+        }
+
+        // Show the preview panel
+        renderAutofixPreview(data);
+    } catch (e) {
+        showAutofixBanner('Auto-fix error: ' + e.message, 'error');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+function renderAutofixPreview(data) {
+    const preview = document.getElementById('autofix-preview');
+    const catContainer = document.getElementById('autofix-categories');
+    const warningsPanel = document.getElementById('autofix-warnings-panel');
+    const banner = document.getElementById('autofix-banner');
+    banner.hidden = true;
+
+    // Group fixes by category
+    const groups = {};
+    data.fixes.forEach((fix, idx) => {
+        fix._idx = idx; // track original index
+        const cat = fixCategory(fix);
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(fix);
+    });
+
+    catContainer.innerHTML = '';
+
+    for (const [cat, fixes] of Object.entries(groups)) {
+        const section = document.createElement('div');
+        section.className = 'autofix-cat';
+
+        // Category header with toggle
+        const header = document.createElement('div');
+        header.className = 'autofix-cat-header';
+        const toggle = document.createElement('input');
+        toggle.type = 'checkbox';
+        toggle.checked = true;
+        toggle.className = 'autofix-cat-toggle';
+        toggle.dataset.category = cat;
+        toggle.addEventListener('change', () => {
+            section.querySelectorAll('.autofix-fix-cb').forEach(cb => {
+                cb.checked = toggle.checked;
+            });
+            updateSelectionCount();
+        });
+        const label = document.createElement('label');
+        label.className = 'autofix-cat-label';
+        label.textContent = (CATEGORY_LABELS[cat] || cat) + ' (' + fixes.length + ')';
+        label.prepend(toggle);
+        header.appendChild(label);
+        section.appendChild(header);
+
+        // Individual fix rows
+        const list = document.createElement('div');
+        list.className = 'autofix-fix-list';
+        for (const fix of fixes) {
+            const row = document.createElement('label');
+            row.className = 'autofix-fix-row';
+
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'autofix-fix-cb';
+            cb.dataset.fixIdx = fix._idx;
+            // Default: high & medium checked, low unchecked
+            cb.checked = fix.confidence !== 'low';
+            cb.addEventListener('change', () => {
+                updateCategoryToggle(section, cat);
+                updateSelectionCount();
+            });
+
+            const conf = document.createElement('span');
+            conf.className = 'autofix-confidence autofix-conf-' + fix.confidence;
+            conf.textContent = fix.confidence;
+            conf.title = fix.confidence + ' confidence';
+
+            const desc = document.createElement('span');
+            desc.className = 'autofix-fix-desc';
+            desc.innerHTML =
+                '<strong>Row ' + (fix.row_index + 1) + '</strong> ' +
+                '<code>' + fix.field + '</code>: ' +
+                '<span class="autofix-old">' + escHtml(fix.original) + '</span>' +
+                ' \u2192 ' +
+                '<span class="autofix-new">' + escHtml(fix.fixed) + '</span>';
+
+            const reason = document.createElement('span');
+            reason.className = 'autofix-fix-reason';
+            reason.textContent = fix.reason;
+
+            const jumpBtn = document.createElement('button');
+            jumpBtn.className = 'btn-sm btn-link autofix-jump';
+            jumpBtn.textContent = 'Go to cell';
+            jumpBtn.title = 'Navigate to this cell';
+            jumpBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                jumpToErrorCell(fix.row_index, fix.field);
+            });
+
+            row.appendChild(cb);
+            row.appendChild(conf);
+            row.appendChild(desc);
+            row.appendChild(reason);
+            row.appendChild(jumpBtn);
+            list.appendChild(row);
+        }
+        section.appendChild(list);
+        catContainer.appendChild(section);
+    }
+
+    // Warnings panel
+    if (data.warnings.length > 0) {
+        warningsPanel.hidden = false;
+        warningsPanel.innerHTML = '<h4>Warnings (cannot be auto-fixed)</h4>';
+        const ul = document.createElement('ul');
+        for (const w of data.warnings) {
+            const li = document.createElement('li');
+            li.className = 'autofix-warning-item';
+            li.innerHTML =
+                '<strong>Row ' + (w.row_index + 1) + '</strong> ' +
+                '<code>' + w.field + '</code> = ' +
+                escHtml(w.value) + ': ' + escHtml(w.message);
+            li.style.cursor = 'pointer';
+            li.addEventListener('click', () => jumpToErrorCell(w.row_index, w.field));
+            ul.appendChild(li);
+        }
+        warningsPanel.appendChild(ul);
+    } else {
+        warningsPanel.hidden = true;
+    }
+
+    updateSelectionCount();
+    preview.hidden = false;
+    preview.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateCategoryToggle(section, cat) {
+    const cbs = section.querySelectorAll('.autofix-fix-cb');
+    const allChecked = [...cbs].every(cb => cb.checked);
+    const noneChecked = [...cbs].every(cb => !cb.checked);
+    const toggle = section.querySelector('.autofix-cat-toggle');
+    toggle.checked = allChecked;
+    toggle.indeterminate = !allChecked && !noneChecked;
+}
+
+function updateSelectionCount() {
+    const all = document.querySelectorAll('.autofix-fix-cb');
+    const checked = document.querySelectorAll('.autofix-fix-cb:checked');
+    const el = document.getElementById('autofix-selection-count');
+    el.textContent = checked.length + ' of ' + all.length + ' selected';
+
+    const applyBtn = document.getElementById('autofix-apply-btn');
+    applyBtn.disabled = checked.length === 0;
+    applyBtn.textContent = checked.length === 0
+        ? 'Apply Selected Fixes'
+        : 'Apply ' + checked.length + ' Fix' + (checked.length !== 1 ? 'es' : '');
+}
+
+function autofixSelectByConfidence(level) {
+    const cbs = document.querySelectorAll('.autofix-fix-cb');
+    cbs.forEach(cb => {
+        const idx = parseInt(cb.dataset.fixIdx);
+        const fix = pendingAutofixData.fixes[idx];
+        if (level === 'all') {
+            cb.checked = true;
+        } else if (level === 'none') {
+            cb.checked = false;
+        } else {
+            const allowed = level.split(',');
+            cb.checked = allowed.includes(fix.confidence);
+        }
+    });
+    // Update all category toggles
+    document.querySelectorAll('.autofix-cat').forEach(section => {
+        const cat = section.querySelector('.autofix-cat-toggle').dataset.category;
+        updateCategoryToggle(section, cat);
+    });
+    updateSelectionCount();
+}
+
+function applySelectedFixes() {
+    if (!pendingAutofixData) return;
+
+    // Snapshot for undo
+    preFixSnapshot = collectTableData();
+
+    // Gather selected fix indices
+    const selected = new Set();
+    document.querySelectorAll('.autofix-fix-cb:checked').forEach(cb => {
+        selected.add(parseInt(cb.dataset.fixIdx));
+    });
+
+    if (selected.size === 0) return;
+
+    // Apply selected fixes to the table cells directly
+    const applied = [];
+    for (const idx of selected) {
+        const fix = pendingAutofixData.fixes[idx];
+        const td = document.querySelector(
+            `#edit-table-body tr[data-row="${fix.row_index}"] td[data-field="${fix.field}"]`
+        );
+        if (!td) continue;
+        const input = td.querySelector('input, select');
+        if (!input) continue;
+
+        input.value = fix.fixed;
+        // Trigger change for any listeners
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+
+        // Highlight the cell by confidence
+        td.classList.remove('error-cell', 'fixed-cell', 'fixed-cell-review');
+        td.classList.add(fix.confidence === 'high' ? 'fixed-cell' : 'fixed-cell-review');
+        applied.push(fix);
+    }
+
+    // Close preview, show summary banner
+    closeAutofixPreview();
+
+    const skipped = pendingAutofixData.fixes.length - applied.length;
+    let msg = applied.length + ' fix' + (applied.length !== 1 ? 'es' : '') + ' applied';
+    if (skipped > 0) msg += ' (' + skipped + ' skipped)';
+    if (pendingAutofixData.warnings.length > 0) {
+        msg += '. ' + pendingAutofixData.warnings.length + ' warning' +
+            (pendingAutofixData.warnings.length !== 1 ? 's' : '') + ' require manual review.';
+    }
+    showAutofixBanner(msg, 'success');
+
+    // Show undo button
+    document.getElementById('undo-autofix-btn').hidden = false;
+}
+
+function undoAutofix() {
+    if (!preFixSnapshot) return;
+
+    // Restore the table from snapshot
+    renderEditTable(preFixSnapshot);
+
+    // Re-highlight any original errors if we still have them
+    preFixSnapshot = null;
+    pendingAutofixData = null;
+    document.getElementById('undo-autofix-btn').hidden = true;
+    showAutofixBanner('Fixes undone. Table restored to pre-fix state.', 'info');
+}
+
+function closeAutofixPreview() {
+    document.getElementById('autofix-preview').hidden = true;
+}
+
+function showAutofixBanner(message, type) {
+    const banner = document.getElementById('autofix-banner');
+    banner.hidden = false;
+    banner.className = 'autofix-banner autofix-' + type;
+    banner.innerHTML = '';
+    const text = document.createElement('span');
+    text.textContent = message;
+    banner.appendChild(text);
+    const dismiss = document.createElement('button');
+    dismiss.className = 'autofix-dismiss';
+    dismiss.textContent = '\u00d7';
+    dismiss.addEventListener('click', () => { banner.hidden = true; });
+    banner.appendChild(dismiss);
+}
+
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
 async function revalidateData() {
     const btn = document.getElementById('validate-btn');
     btn.classList.add('loading');
@@ -656,6 +1002,10 @@ async function revalidateData() {
     }
 }
 
+function scrollToTop() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
 function startOver() {
     const onDashboard = !document.getElementById('dashboard').hidden;
     const onEditor = !document.getElementById('error-editor').hidden;
@@ -679,6 +1029,12 @@ function startOver() {
 // Expose to HTML onclick handlers
 window.runGrowth = runGrowth;
 window.exportData = exportData;
+window.autofixData = autofixData;
 window.revalidateData = revalidateData;
 window.startOver = startOver;
 window.loadStatistics = loadStatistics;
+window.autofixSelectByConfidence = autofixSelectByConfidence;
+window.applySelectedFixes = applySelectedFixes;
+window.closeAutofixPreview = closeAutofixPreview;
+window.undoAutofix = undoAutofix;
+window.scrollToTop = scrollToTop;

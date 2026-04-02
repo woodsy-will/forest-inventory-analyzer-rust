@@ -146,13 +146,16 @@ impl Tree {
     }
 
     /// Estimate cubic foot volume using custom equation coefficients.
+    ///
+    /// Delegates the pure formula to [`VolumeEquation::compute_cuft`], then
+    /// applies tree-level concerns (optional height, zero-guard, defect).
     pub fn volume_cuft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;
-        if self.dbh <= 0.0 || height <= 0.0 {
+        let height = self.height?;                          // None height -> None
+        if self.dbh <= 0.0 || height <= 0.0 {               // guard: non-positive dims -> 0
             return Some(0.0);
         }
-        let gross_volume = eq.cuft_b1 * self.dbh.powi(2) * height;
-        let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
+        let gross_volume = eq.compute_cuft(self.dbh, height); // delegate formula
+        let defect_factor = 1.0 - self.defect.unwrap_or(0.0); // tree-level defect
         Some(gross_volume * defect_factor)
     }
 
@@ -184,14 +187,17 @@ impl Tree {
     }
 
     /// Estimate board foot volume using custom equation coefficients.
+    ///
+    /// Delegates the pure formula to [`VolumeEquation::compute_bdft`], then
+    /// applies tree-level concerns (optional height, zero-height guard, defect).
     pub fn volume_bdft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;
-        if self.dbh < eq.bdft_min_dbh || height <= 0.0 {
+        let height = self.height?;                           // None height -> None
+        if height <= 0.0 {                                    // guard: non-positive height -> 0
             return Some(0.0);
         }
-        let gross_volume = eq.bdft_b1 * self.dbh.powi(2) * height - eq.bdft_b2 * self.dbh;
-        let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
-        Some(gross_volume.max(0.0) * defect_factor)
+        let gross_volume = eq.compute_bdft(self.dbh, height); // delegate formula (handles min_dbh + clamp)
+        let defect_factor = 1.0 - self.defect.unwrap_or(0.0); // tree-level defect
+        Some(gross_volume * defect_factor)
     }
 
     /// Check if the tree is alive.

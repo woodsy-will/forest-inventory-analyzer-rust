@@ -74,11 +74,7 @@ impl ForestInventory {
     /// assert!((inv.mean_tpa() - 5.0).abs() < 0.001);
     /// ```
     pub fn mean_tpa(&self) -> f64 {
-        if self.plots.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = self.plots.iter().map(|p| p.trees_per_acre()).sum();
-        sum / self.plots.len() as f64
+        self.mean_of(Plot::trees_per_acre)
     }
 
     /// Mean basal area per acre across all plots (sq ft/acre).
@@ -103,28 +99,28 @@ impl ForestInventory {
     /// assert!(inv.mean_basal_area() > 0.0);
     /// ```
     pub fn mean_basal_area(&self) -> f64 {
-        if self.plots.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = self.plots.iter().map(|p| p.basal_area_per_acre()).sum();
-        sum / self.plots.len() as f64
+        self.mean_of(Plot::basal_area_per_acre)
     }
 
     /// Mean cubic foot volume per acre across all plots.
     pub fn mean_volume_cuft(&self) -> f64 {
-        if self.plots.is_empty() {
-            return 0.0;
-        }
-        let sum: f64 = self.plots.iter().map(|p| p.volume_cuft_per_acre()).sum();
-        sum / self.plots.len() as f64
+        self.mean_of(Plot::volume_cuft_per_acre)
     }
 
     /// Mean board foot volume per acre across all plots.
     pub fn mean_volume_bdft(&self) -> f64 {
+        self.mean_of(Plot::volume_bdft_per_acre)
+    }
+
+    /// Compute the mean of a per-plot metric across all plots.
+    ///
+    /// Returns `0.0` for an empty inventory. All plots are equally weighted
+    /// (not weighted by `plot_size_acres`).
+    fn mean_of(&self, f: impl Fn(&Plot) -> f64) -> f64 {
         if self.plots.is_empty() {
             return 0.0;
         }
-        let sum: f64 = self.plots.iter().map(|p| p.volume_bdft_per_acre()).sum();
+        let sum: f64 = self.plots.iter().map(f).sum();
         sum / self.plots.len() as f64
     }
 
@@ -133,6 +129,11 @@ impl ForestInventory {
     /// Returns a sorted `Vec<(stand_id, ForestInventory)>` where each entry
     /// contains only the plots belonging to that stand. If no plots have a
     /// `stand_id`, returns an empty Vec.
+    ///
+    /// **Note:** Plots without a `stand_id` are silently excluded from the
+    /// result. In a mixed inventory where some plots have stand assignments
+    /// and others do not, the unassigned plots will not appear in any
+    /// sub-inventory. Callers should check for this if completeness matters.
     pub fn stands(&self) -> Vec<(u32, ForestInventory)> {
         let mut stand_plots: HashMap<u32, Vec<Plot>> = HashMap::new();
         let mut has_any = false;

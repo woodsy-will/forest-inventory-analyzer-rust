@@ -51,12 +51,30 @@ impl std::str::FromStr for TreeStatus {
 }
 
 /// Species information for a tree.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Equality and hashing use the `code` field only, matching the documented
+/// design decision: "Species matching by code only — same code with different
+/// common_name treated as same species."
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Species {
     /// Common name (e.g., "Douglas Fir")
     pub common_name: String,
     /// Species code (e.g., "DF", "PSME")
     pub code: String,
+}
+
+impl PartialEq for Species {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
+}
+
+impl Eq for Species {}
+
+impl std::hash::Hash for Species {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.code.hash(state);
+    }
 }
 
 impl std::fmt::Display for Species {
@@ -398,6 +416,38 @@ mod tests {
         set.insert(sp1);
         set.insert(sp2);
         assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn test_species_equality_by_code_only() {
+        // CLAUDE.md: "Species matching by code only — same code with
+        // different common_name treated as same species."
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Douglas-fir".to_string(),
+            code: "DF".to_string(),
+        };
+        assert_eq!(sp1, sp2);
+    }
+
+    #[test]
+    fn test_species_hash_by_code_only() {
+        use std::collections::HashSet;
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Douglas-fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let mut set = HashSet::new();
+        set.insert(sp1);
+        set.insert(sp2);
+        assert_eq!(set.len(), 1); // same code = same species
     }
 
     // --- Basal area tests ---

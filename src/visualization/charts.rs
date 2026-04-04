@@ -21,7 +21,7 @@ pub fn format_diameter_histogram(dist: &DiameterDistribution) -> String {
         "  {:>10}  {:>8}  {:>8}  Distribution\n",
         "DBH Class", "TPA", "BA/ac"
     ));
-    output.push_str(&format!("  {}\n", "-".repeat(70)));
+    output.push_str(&format!("  {}\n", "-".repeat(60)));
 
     for class in &dist.classes {
         let bar_len = if max_tpa > 0.0 {

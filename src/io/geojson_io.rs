@@ -25,7 +25,7 @@ pub fn build_geojson_value(inventory: &ForestInventory) -> Value {
                         "dbh": t.dbh,
                         "height": t.height,
                         "crown_ratio": t.crown_ratio,
-                        "status": format!("{:?}", t.status),
+                        "status": t.status.to_string(),
                         "expansion_factor": t.expansion_factor,
                         "age": t.age,
                         "defect": t.defect,

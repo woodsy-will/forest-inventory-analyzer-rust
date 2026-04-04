@@ -162,11 +162,25 @@ pub struct EditableTreeRow {
 }
 
 /// Convert flat editable rows into a `ForestInventory`.
+///
+/// Unknown status strings default to `Live` with a warning logged via `eprintln!`.
+/// Tree-level validation is performed; invalid trees are included but issues are
+/// logged to stderr. Plot metadata conflicts (e.g., differing slope for the same
+/// plot_id) are also logged.
 pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestInventory {
     let mut plots: std::collections::HashMap<u32, Plot> = std::collections::HashMap::new();
 
     for row in rows {
-        let status: TreeStatus = row.status.parse().unwrap_or(TreeStatus::Live);
+        let status: TreeStatus = match row.status.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!(
+                    "Warning: Plot {} Tree {}: unknown status '{}', defaulting to Live",
+                    row.plot_id, row.tree_id, row.status
+                );
+                TreeStatus::Live
+            }
+        };
         let tree = Tree {
             tree_id: row.tree_id,
             plot_id: row.plot_id,
@@ -183,6 +197,14 @@ pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestI
             defect: row.defect,
         };
 
+        // Log validation issues (non-fatal — include the tree regardless)
+        for issue in tree.validate_all(row.row_index) {
+            eprintln!(
+                "Warning: Plot {} Tree {}: {} = {}",
+                issue.plot_id, issue.tree_id, issue.field, issue.message
+            );
+        }
+
         let plot = plots.entry(row.plot_id).or_insert_with(|| Plot {
             plot_id: row.plot_id,
             plot_size_acres: row.plot_size_acres.unwrap_or(0.2),
@@ -192,6 +214,18 @@ pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestI
             trees: Vec::new(),
             stand_id: None,
         });
+
+        // Warn on conflicting plot metadata
+        if let Some(new_slope) = row.slope_percent {
+            if let Some(existing) = plot.slope_percent {
+                if (existing - new_slope).abs() > f64::EPSILON && !plot.trees.is_empty() {
+                    eprintln!(
+                        "Warning: Plot {}: conflicting slope_percent ({} vs {}), using first value",
+                        row.plot_id, existing, new_slope
+                    );
+                }
+            }
+        }
 
         plot.trees.push(tree);
     }

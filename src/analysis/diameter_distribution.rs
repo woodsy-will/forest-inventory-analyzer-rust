@@ -35,6 +35,13 @@ impl DiameterDistribution {
     /// * `inventory` - The forest inventory data
     /// * `class_width` - Width of each diameter class in inches (commonly 2)
     pub fn from_inventory(inventory: &ForestInventory, class_width: f64) -> Self {
+        if class_width <= 0.0 || !class_width.is_finite() {
+            return DiameterDistribution {
+                class_width,
+                classes: Vec::new(),
+            };
+        }
+
         let num_plots = inventory.num_plots() as f64;
         if num_plots == 0.0 {
             return DiameterDistribution {
@@ -305,5 +312,21 @@ mod tests {
         let deserialized: DiameterDistribution = serde_json::from_str(&json).unwrap();
         assert_eq!(deserialized.classes.len(), dist.classes.len());
         assert_eq!(deserialized.class_width, dist.class_width);
+    }
+
+    #[test]
+    fn test_zero_class_width_returns_empty() {
+        let mut inv = ForestInventory::new("Zero Width");
+        inv.plots.push(make_plot(1, vec![make_tree(1, 12.0, 5.0)]));
+        let dist = DiameterDistribution::from_inventory(&inv, 0.0);
+        assert!(dist.classes.is_empty());
+    }
+
+    #[test]
+    fn test_negative_class_width_returns_empty() {
+        let mut inv = ForestInventory::new("Negative Width");
+        inv.plots.push(make_plot(1, vec![make_tree(1, 12.0, 5.0)]));
+        let dist = DiameterDistribution::from_inventory(&inv, -2.0);
+        assert!(dist.classes.is_empty());
     }
 }

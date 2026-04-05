@@ -35,10 +35,17 @@ pub async fn start_server(config: AppConfig) -> std::io::Result<()> {
             .allowed_origin(&format!("http://localhost:{port}"))
             .allowed_origin(&format!("http://127.0.0.1:{port}"))
             .allowed_origin_fn(|origin, _req| {
+                let s = origin.to_str().unwrap_or("");
                 // Allow any origin for local/LAN access in desktop mode
-                origin.as_bytes().starts_with(b"http://192.168.")
-                    || origin.as_bytes().starts_with(b"http://10.")
-                    || origin.as_bytes().starts_with(b"http://172.")
+                // RFC 1918 private ranges: 192.168.0.0/16, 10.0.0.0/8, 172.16.0.0/12
+                s.starts_with("http://192.168.")
+                    || s.starts_with("http://10.")
+                    || s.strip_prefix("http://172.").is_some_and(|rest| {
+                        rest.split('.')
+                            .next()
+                            .and_then(|octet| octet.parse::<u8>().ok())
+                            .is_some_and(|o| (16..=31).contains(&o))
+                    })
             })
             .allowed_methods(vec!["GET", "POST"])
             .allowed_header(header::CONTENT_TYPE)

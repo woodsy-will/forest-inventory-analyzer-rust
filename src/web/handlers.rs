@@ -750,6 +750,13 @@ pub async fn autofix(
     summary.total_fixes = fixes.len();
     summary.warnings_count = warnings.len();
 
+    // Persist the fixed rows back to pending storage so the latest state
+    // survives browser refresh or network retries.
+    let name = state
+        .get_pending_name(&body.id)?
+        .unwrap_or_else(|| "Unknown".to_string());
+    state.insert_pending(body.id, name, rows.clone())?;
+
     Ok(HttpResponse::Ok().json(AutofixResponse {
         trees: rows,
         fixes,

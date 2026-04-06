@@ -101,13 +101,15 @@ enum Commands {
         #[arg(short, long)]
         input: PathBuf,
 
-        /// Confidence level for statistical analysis (0.0-1.0)
-        #[arg(short, long, default_value = "0.95", value_parser = parse_confidence)]
-        confidence: f64,
+        /// Confidence level for statistical analysis (0.0-1.0).
+        /// Falls back to config.toml analysis.confidence_level if not specified.
+        #[arg(short, long, value_parser = parse_confidence)]
+        confidence: Option<f64>,
 
-        /// Diameter class width in inches for distribution
-        #[arg(short, long, default_value = "2.0")]
-        diameter_class_width: f64,
+        /// Diameter class width in inches for distribution.
+        /// Falls back to config.toml analysis.diameter_class_width if not specified.
+        #[arg(short, long)]
+        diameter_class_width: Option<f64>,
 
         /// Show detailed species composition
         #[arg(long, default_value = "true")]
@@ -133,12 +135,12 @@ enum Commands {
         model: String,
 
         /// Annual growth rate (for exponential/logistic models)
-        #[arg(short, long, default_value = "0.03")]
-        rate: f64,
+        #[arg(short, long)]
+        rate: Option<f64>,
 
         /// Carrying capacity for basal area (logistic model, sq ft/acre)
-        #[arg(short, long, default_value = "300.0")]
-        capacity: f64,
+        #[arg(short, long)]
+        capacity: Option<f64>,
 
         /// Annual mortality rate (proportion for exponential/logistic, TPA/year for linear)
         #[arg(long)]
@@ -170,9 +172,10 @@ enum Commands {
         #[arg(long)]
         output_dir: PathBuf,
 
-        /// Confidence level for statistical analysis (0.0-1.0)
-        #[arg(short, long, default_value = "0.95", value_parser = parse_confidence)]
-        confidence: f64,
+        /// Confidence level for statistical analysis (0.0-1.0).
+        /// Falls back to config.toml analysis.confidence_level if not specified.
+        #[arg(short, long, value_parser = parse_confidence)]
+        confidence: Option<f64>,
     },
 
     /// Display a quick summary of the inventory
@@ -200,7 +203,7 @@ fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
     let cli = Cli::parse();
-    let _config = AppConfig::load(&cli.config)?;
+    let config = AppConfig::load(&cli.config)?;
 
     match cli.command {
         Commands::Analyze {
@@ -210,6 +213,10 @@ fn main() -> Result<()> {
             species,
             distribution,
         } => {
+            let confidence = confidence.unwrap_or(config.analysis.confidence_level);
+            let diameter_class_width =
+                diameter_class_width.unwrap_or(config.analysis.diameter_class_width);
+
             println!(
                 "\n{}",
                 format!("Forest Inventory Analysis: {}", input.display())
@@ -288,36 +295,30 @@ fn main() -> Result<()> {
                 anyhow::anyhow!("{e}")
             })?;
 
-            // Apply CLI overrides for rate/capacity/mortality
+            // Apply CLI overrides for rate/capacity/mortality (only when explicitly provided)
             match &mut growth_model {
                 GrowthModel::Exponential {
                     annual_rate,
                     mortality_rate,
                 } => {
-                    *annual_rate = rate;
-                    if let Some(m) = mortality {
-                        *mortality_rate = m;
-                    }
+                    if let Some(r) = rate { *annual_rate = r; }
+                    if let Some(m) = mortality { *mortality_rate = m; }
                 }
                 GrowthModel::Logistic {
                     annual_rate,
                     carrying_capacity,
                     mortality_rate,
                 } => {
-                    *annual_rate = rate;
-                    *carrying_capacity = capacity;
-                    if let Some(m) = mortality {
-                        *mortality_rate = m;
-                    }
+                    if let Some(r) = rate { *annual_rate = r; }
+                    if let Some(c) = capacity { *carrying_capacity = c; }
+                    if let Some(m) = mortality { *mortality_rate = m; }
                 }
                 GrowthModel::Linear {
                     annual_increment,
                     mortality_rate,
                 } => {
-                    *annual_increment = rate;
-                    if let Some(m) = mortality {
-                        *mortality_rate = m;
-                    }
+                    if let Some(r) = rate { *annual_increment = r; }
+                    if let Some(m) = mortality { *mortality_rate = m; }
                 }
             }
 
@@ -353,6 +354,8 @@ fn main() -> Result<()> {
             output_dir,
             confidence,
         } => {
+            let confidence = confidence.unwrap_or(config.analysis.confidence_level);
+
             if !input_dir.is_dir() {
                 anyhow::bail!("Input path is not a directory: {}", input_dir.display());
             }
@@ -435,6 +438,10 @@ fn main() -> Result<()> {
                 "Done.".green().bold(),
                 output_dir.display()
             );
+
+            if failed > 0 {
+                anyhow::bail!("{failed} file(s) failed during batch analysis");
+            }
         }
 
         Commands::Summary { input } => {
@@ -460,14 +467,20 @@ fn main() -> Result<()> {
 
         #[cfg(feature = "web")]
         Commands::Serve { port, bind } => {
-            let mut server_config = _config;
+            let mut server_config = config;
             server_config.server.port = port;
             server_config.server.bind_address = bind;
 
             // Resolve relative database path relative to the executable's directory
             if !std::path::Path::new(&server_config.database.path).is_absolute() {
-                if let Ok(exe_dir) = std::env::current_exe().map(|p| p.parent().unwrap().to_path_buf()) {
-                    server_config.database.path = exe_dir.join(&server_config.database.path).to_string_lossy().to_string();
+                if let Some(exe_dir) = std::env::current_exe()
+                    .ok()
+                    .and_then(|p| p.parent().map(|d| d.to_path_buf()))
+                {
+                    server_config.database.path = exe_dir
+                        .join(&server_config.database.path)
+                        .to_string_lossy()
+                        .to_string();
                 }
             }
 

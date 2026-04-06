@@ -56,7 +56,7 @@ pub fn format_stand_summary(metrics: &StandMetrics) -> String {
         Cell::new(""),
     ]);
 
-    output.push_str(&format!("{table}"));
+    output.push_str(&table.to_string());
     output
 }
 
@@ -70,6 +70,11 @@ pub fn format_species_table(metrics: &StandMetrics) -> String {
     let mut output = String::new();
     output.push_str(&format!("\n{}\n", "Species Composition".bold().green()));
     output.push_str(&format!("{}\n", "=".repeat(50)));
+
+    if metrics.species_composition.is_empty() {
+        output.push_str("  No species data available.\n");
+        return output;
+    }
 
     let mut table = Table::new();
     table
@@ -92,7 +97,7 @@ pub fn format_species_table(metrics: &StandMetrics) -> String {
         ]);
     }
 
-    output.push_str(&format!("{table}"));
+    output.push_str(&table.to_string());
     output
 }
 
@@ -148,7 +153,7 @@ pub fn format_statistics_table(stats: &SamplingStatistics) -> String {
         ]);
     }
 
-    output.push_str(&format!("{table}"));
+    output.push_str(&table.to_string());
     output
 }
 
@@ -186,7 +191,7 @@ pub fn format_growth_table(projections: &[GrowthProjection]) -> String {
         ]);
     }
 
-    output.push_str(&format!("{table}"));
+    output.push_str(&table.to_string());
     output
 }
 

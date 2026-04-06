@@ -63,6 +63,12 @@ impl SamplingStatistics {
 
 /// Compute a confidence interval from a set of values.
 fn compute_ci(values: &[f64], confidence: f64) -> Result<ConfidenceInterval, ForestError> {
+    if !(0.0 < confidence && confidence < 1.0) {
+        return Err(ForestError::ValidationError(format!(
+            "confidence must be in (0.0, 1.0), got {confidence}"
+        )));
+    }
+
     let n = values.len();
     if n < 2 {
         return Err(ForestError::InsufficientData(
@@ -297,5 +303,18 @@ mod tests {
         let json = serde_json::to_string(&stats).unwrap();
         let deserialized: SamplingStatistics = serde_json::from_str(&json).unwrap();
         assert!((deserialized.tpa.mean - stats.tpa.mean).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_compute_ci_confidence_too_high() {
+        let values = vec![10.0, 12.0, 11.0];
+        assert!(compute_ci(&values, 1.0).is_err());
+    }
+
+    #[test]
+    fn test_compute_ci_confidence_too_low() {
+        let values = vec![10.0, 12.0, 11.0];
+        assert!(compute_ci(&values, 0.0).is_err());
+        assert!(compute_ci(&values, -0.5).is_err());
     }
 }

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::tree::ValidationIssue;
 use super::Tree;
 
 /// A sample plot in the forest inventory.
@@ -115,6 +116,71 @@ impl Plot {
             return 0.0;
         }
         (sum_dbh_sq / total_tpa).sqrt()
+    }
+
+    /// Validate plot-level fields. Returns the first error found.
+    pub fn validate(&self) -> Result<(), crate::error::ForestError> {
+        if let Some(issue) = self.validate_all().into_iter().next() {
+            return Err(crate::error::ForestError::ValidationError(format!(
+                "Plot {}: {}",
+                issue.plot_id, issue.message
+            )));
+        }
+        Ok(())
+    }
+
+    /// Validate plot fields and all contained trees, collecting all issues.
+    pub fn validate_all(&self) -> Vec<ValidationIssue> {
+        let mut issues = Vec::new();
+
+        if self.plot_size_acres <= 0.0 {
+            issues.push(ValidationIssue {
+                plot_id: self.plot_id,
+                tree_id: 0,
+                row_index: 0,
+                field: std::borrow::Cow::Borrowed("plot_size_acres"),
+                message: std::borrow::Cow::Owned(format!(
+                    "plot_size_acres must be positive, got {}",
+                    self.plot_size_acres
+                )),
+            });
+        }
+
+        if let Some(slope) = self.slope_percent {
+            if slope < 0.0 {
+                issues.push(ValidationIssue {
+                    plot_id: self.plot_id,
+                    tree_id: 0,
+                    row_index: 0,
+                    field: std::borrow::Cow::Borrowed("slope_percent"),
+                    message: std::borrow::Cow::Owned(format!(
+                        "slope_percent must be non-negative, got {}",
+                        slope
+                    )),
+                });
+            }
+        }
+
+        if let Some(aspect) = self.aspect_degrees {
+            if !(0.0..=360.0).contains(&aspect) {
+                issues.push(ValidationIssue {
+                    plot_id: self.plot_id,
+                    tree_id: 0,
+                    row_index: 0,
+                    field: std::borrow::Cow::Borrowed("aspect_degrees"),
+                    message: std::borrow::Cow::Owned(format!(
+                        "aspect_degrees must be in 0..=360, got {}",
+                        aspect
+                    )),
+                });
+            }
+        }
+
+        for (i, tree) in self.trees.iter().enumerate() {
+            issues.extend(tree.validate_all(i));
+        }
+
+        issues
     }
 }
 
@@ -305,5 +371,56 @@ mod tests {
         assert!(plot.volume_cuft_per_acre() > 0.0);
         assert!(plot.volume_bdft_per_acre() > 0.0);
         assert!(plot.quadratic_mean_diameter() > 12.0); // weighted toward larger tree
+    }
+
+    // --- Validation tests ---
+
+    #[test]
+    fn test_validate_valid_plot() {
+        let plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
+        assert!(plot.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_zero_plot_size() {
+        let mut plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
+        plot.plot_size_acres = 0.0;
+        let err = plot.validate().unwrap_err();
+        assert!(err.to_string().contains("plot_size_acres must be positive"));
+    }
+
+    #[test]
+    fn test_validate_negative_slope() {
+        let mut plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
+        plot.slope_percent = Some(-5.0);
+        let err = plot.validate().unwrap_err();
+        assert!(err.to_string().contains("slope_percent must be non-negative"));
+    }
+
+    #[test]
+    fn test_validate_aspect_out_of_range() {
+        let mut plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
+        plot.aspect_degrees = Some(400.0);
+        let err = plot.validate().unwrap_err();
+        assert!(err.to_string().contains("aspect_degrees must be in 0..=360"));
+    }
+
+    #[test]
+    fn test_validate_propagates_tree_errors() {
+        let plot = make_plot(vec![make_tree(1, -1.0, Some(80.0), TreeStatus::Live, 5.0)]);
+        let issues = plot.validate_all();
+        assert!(issues.iter().any(|i| i.field == "dbh"));
+    }
+
+    #[test]
+    fn test_validate_all_collects_multiple() {
+        let mut plot = make_plot(vec![
+            make_tree(1, -1.0, Some(80.0), TreeStatus::Live, 5.0),
+            make_tree(2, 12.0, Some(-5.0), TreeStatus::Live, 5.0),
+        ]);
+        plot.plot_size_acres = -1.0;
+        let issues = plot.validate_all();
+        // Should have: plot_size_acres + tree1 dbh + tree2 height = 3 issues
+        assert!(issues.len() >= 3);
     }
 }

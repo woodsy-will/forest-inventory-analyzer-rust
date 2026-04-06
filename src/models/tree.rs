@@ -51,12 +51,30 @@ impl std::str::FromStr for TreeStatus {
 }
 
 /// Species information for a tree.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Equality and hashing use the `code` field only, matching the documented
+/// design decision: "Species matching by code only — same code with different
+/// common_name treated as same species."
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Species {
     /// Common name (e.g., "Douglas Fir")
     pub common_name: String,
     /// Species code (e.g., "DF", "PSME")
     pub code: String,
+}
+
+impl PartialEq for Species {
+    fn eq(&self, other: &Self) -> bool {
+        self.code == other.code
+    }
+}
+
+impl Eq for Species {}
+
+impl std::hash::Hash for Species {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.code.hash(state);
+    }
 }
 
 impl std::fmt::Display for Species {
@@ -146,13 +164,16 @@ impl Tree {
     }
 
     /// Estimate cubic foot volume using custom equation coefficients.
+    ///
+    /// Delegates the pure formula to [`VolumeEquation::compute_cuft`], then
+    /// applies tree-level concerns (optional height, zero-guard, defect).
     pub fn volume_cuft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;
-        if self.dbh <= 0.0 || height <= 0.0 {
+        let height = self.height?;                          // None height -> None
+        if self.dbh <= 0.0 || height <= 0.0 {               // guard: non-positive dims -> 0
             return Some(0.0);
         }
-        let gross_volume = eq.cuft_b1 * self.dbh.powi(2) * height;
-        let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
+        let gross_volume = eq.compute_cuft(self.dbh, height); // delegate formula
+        let defect_factor = 1.0 - self.defect.unwrap_or(0.0); // tree-level defect
         Some(gross_volume * defect_factor)
     }
 
@@ -184,14 +205,17 @@ impl Tree {
     }
 
     /// Estimate board foot volume using custom equation coefficients.
+    ///
+    /// Delegates the pure formula to [`VolumeEquation::compute_bdft`], then
+    /// applies tree-level concerns (optional height, zero-height guard, defect).
     pub fn volume_bdft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;
-        if self.dbh < eq.bdft_min_dbh || height <= 0.0 {
+        let height = self.height?;                           // None height -> None
+        if height <= 0.0 {                                    // guard: non-positive height -> 0
             return Some(0.0);
         }
-        let gross_volume = eq.bdft_b1 * self.dbh.powi(2) * height - eq.bdft_b2 * self.dbh;
-        let defect_factor = 1.0 - self.defect.unwrap_or(0.0);
-        Some(gross_volume.max(0.0) * defect_factor)
+        let gross_volume = eq.compute_bdft(self.dbh, height); // delegate formula (handles min_dbh + clamp)
+        let defect_factor = 1.0 - self.defect.unwrap_or(0.0); // tree-level defect
+        Some(gross_volume * defect_factor)
     }
 
     /// Check if the tree is alive.
@@ -392,6 +416,38 @@ mod tests {
         set.insert(sp1);
         set.insert(sp2);
         assert_eq!(set.len(), 1);
+    }
+
+    #[test]
+    fn test_species_equality_by_code_only() {
+        // CLAUDE.md: "Species matching by code only — same code with
+        // different common_name treated as same species."
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Douglas-fir".to_string(),
+            code: "DF".to_string(),
+        };
+        assert_eq!(sp1, sp2);
+    }
+
+    #[test]
+    fn test_species_hash_by_code_only() {
+        use std::collections::HashSet;
+        let sp1 = Species {
+            common_name: "Douglas Fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let sp2 = Species {
+            common_name: "Douglas-fir".to_string(),
+            code: "DF".to_string(),
+        };
+        let mut set = HashSet::new();
+        set.insert(sp1);
+        set.insert(sp2);
+        assert_eq!(set.len(), 1); // same code = same species
     }
 
     // --- Basal area tests ---

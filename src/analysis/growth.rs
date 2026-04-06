@@ -83,6 +83,61 @@ pub fn project_growth(
         ));
     }
 
+    // Validate model parameters
+    match model {
+        GrowthModel::Exponential {
+            annual_rate,
+            mortality_rate,
+        } => {
+            if *annual_rate < 0.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "annual_rate must be non-negative, got {annual_rate}"
+                )));
+            }
+            if *mortality_rate < 0.0 || *mortality_rate >= 1.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "mortality_rate must be in [0.0, 1.0), got {mortality_rate}"
+                )));
+            }
+        }
+        GrowthModel::Logistic {
+            annual_rate,
+            carrying_capacity,
+            mortality_rate,
+        } => {
+            if *annual_rate < 0.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "annual_rate must be non-negative, got {annual_rate}"
+                )));
+            }
+            if *carrying_capacity <= 0.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "carrying_capacity must be positive, got {carrying_capacity}"
+                )));
+            }
+            if *mortality_rate < 0.0 || *mortality_rate >= 1.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "mortality_rate must be in [0.0, 1.0), got {mortality_rate}"
+                )));
+            }
+        }
+        GrowthModel::Linear {
+            annual_increment,
+            mortality_rate,
+        } => {
+            if *annual_increment < 0.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "annual_increment must be non-negative, got {annual_increment}"
+                )));
+            }
+            if *mortality_rate < 0.0 {
+                return Err(ForestError::ValidationError(format!(
+                    "mortality_rate must be non-negative, got {mortality_rate}"
+                )));
+            }
+        }
+    }
+
     let initial_tpa = inventory.mean_tpa();
     let initial_ba = inventory.mean_basal_area();
     let initial_vol_cuft = inventory.mean_volume_cuft();
@@ -561,5 +616,68 @@ mod tests {
         assert!("unknown".parse::<GrowthModel>().is_err());
         assert!("".parse::<GrowthModel>().is_err());
         assert!("quadratic".parse::<GrowthModel>().is_err());
+    }
+
+    // --- Parameter validation tests ---
+
+    #[test]
+    fn test_negative_annual_rate_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential {
+            annual_rate: -0.01,
+            mortality_rate: 0.005,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_negative_mortality_rate_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential {
+            annual_rate: 0.03,
+            mortality_rate: -0.01,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_mortality_rate_one_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Exponential {
+            annual_rate: 0.03,
+            mortality_rate: 1.0,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_negative_carrying_capacity_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Logistic {
+            annual_rate: 0.03,
+            carrying_capacity: -100.0,
+            mortality_rate: 0.005,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_negative_annual_increment_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Linear {
+            annual_increment: -1.0,
+            mortality_rate: 0.5,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
+    }
+
+    #[test]
+    fn test_negative_linear_mortality_rejected() {
+        let inv = sample_inventory();
+        let model = GrowthModel::Linear {
+            annual_increment: 2.0,
+            mortality_rate: -0.5,
+        };
+        assert!(project_growth(&inv, &model, 10).is_err());
     }
 }

@@ -76,6 +76,7 @@ struct CruiseRow {
     sampling_method: String,
     raw_ef: f64,
     total_defect_pct: f64,
+    status_str: String,
 }
 
 /// Parse all cruise rows from the Plot_form* sheets.
@@ -134,6 +135,9 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
         let method_col = find_col(&headers, "Sampling");
         let ef_col = find_col(&headers, "Expansion");
         let defect_cols = find_cols_containing(&headers, "defect");
+        let status_col = find_col(&headers, "Status")
+            .or_else(|| find_col(&headers, "Tree Class"))
+            .or_else(|| find_col(&headers, "Tree_Class"));
 
         for row in rows {
             let get_f64 = |idx: usize| -> f64 {
@@ -157,10 +161,13 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
                 dbh: get_f64(dbh_col),
                 height: get_f64(height_col),
                 sampling_method: method_col
-                    .map(get_string)
+                    .map(&get_string)
                     .unwrap_or_default(),
-                raw_ef: ef_col.map(get_f64).unwrap_or(0.0),
+                raw_ef: ef_col.map(&get_f64).unwrap_or(0.0),
                 total_defect_pct,
+                status_str: status_col
+                    .map(&get_string)
+                    .unwrap_or_default(),
             });
         }
     }
@@ -198,7 +205,7 @@ pub fn read_cruise_excel<RS: std::io::Read + std::io::Seek>(
 
     for cr in &cruise_rows {
         let key = (cr.stand_id, cr.plot_id);
-        let composite_id = cr.stand_id * 1000 + cr.plot_id;
+        let composite_id = cr.stand_id * 100_000 + cr.plot_id;
 
         plots.entry(key).or_insert_with(|| Plot {
             plot_id: composite_id,
@@ -235,6 +242,12 @@ pub fn read_cruise_excel<RS: std::io::Read + std::io::Seek>(
             None
         };
 
+        let status = if cr.status_str.is_empty() {
+            TreeStatus::Live
+        } else {
+            cr.status_str.parse().unwrap_or(TreeStatus::Live)
+        };
+
         let tree = Tree {
             tree_id: *counter,
             plot_id: composite_id,
@@ -245,7 +258,7 @@ pub fn read_cruise_excel<RS: std::io::Read + std::io::Seek>(
             dbh: cr.dbh,
             height,
             crown_ratio: None,
-            status: TreeStatus::Live,
+            status,
             expansion_factor: ef,
             age: None,
             defect,
@@ -279,7 +292,7 @@ pub fn parse_cruise_lenient<RS: std::io::Read + std::io::Seek>(
 
     for cr in &cruise_rows {
         let key = (cr.stand_id, cr.plot_id);
-        let composite_id = cr.stand_id * 1000 + cr.plot_id;
+        let composite_id = cr.stand_id * 100_000 + cr.plot_id;
 
         let is_null = cr.dbh <= 0.0
             || cr.species_name.to_lowercase() == "null"
@@ -321,6 +334,27 @@ pub fn parse_cruise_lenient<RS: std::io::Read + std::io::Seek>(
             None
         };
 
+        let status = if cr.status_str.is_empty() {
+            TreeStatus::Live
+        } else {
+            match cr.status_str.parse() {
+                Ok(s) => s,
+                Err(_) => {
+                    issues.push(ValidationIssue {
+                        plot_id: composite_id,
+                        tree_id: *counter,
+                        row_index,
+                        field: Cow::Borrowed("status"),
+                        message: Cow::Owned(format!(
+                            "Unknown tree status '{}', defaulting to Live",
+                            cr.status_str
+                        )),
+                    });
+                    TreeStatus::Live
+                }
+            }
+        };
+
         // Build a Tree to validate
         let tree = Tree {
             tree_id: *counter,
@@ -332,7 +366,7 @@ pub fn parse_cruise_lenient<RS: std::io::Read + std::io::Seek>(
             dbh: cr.dbh,
             height,
             crown_ratio: None,
-            status: TreeStatus::Live,
+            status: status.clone(),
             expansion_factor: ef,
             age: None,
             defect,
@@ -349,7 +383,7 @@ pub fn parse_cruise_lenient<RS: std::io::Read + std::io::Seek>(
             dbh: cr.dbh,
             height,
             crown_ratio: None,
-            status: "Live".to_string(),
+            status: status.to_string(),
             expansion_factor: ef,
             age: None,
             defect,

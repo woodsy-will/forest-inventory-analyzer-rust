@@ -76,58 +76,72 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
         0.0
     };
 
-    // Mean height of all live trees with height measurements
-    let (height_sum, height_count) = inventory
+    // Mean height of all live trees, weighted by expansion factor
+    let (weighted_height_sum, ef_sum_with_height) = inventory
         .plots
         .iter()
         .flat_map(|p| p.live_trees())
-        .filter_map(|t| t.height)
-        .fold((0.0, 0usize), |(sum, count), h| (sum + h, count + 1));
-    let mean_height = if height_count > 0 {
-        Some(height_sum / height_count as f64)
+        .filter_map(|t| t.height.map(|h| (h * t.expansion_factor, t.expansion_factor)))
+        .fold((0.0, 0.0_f64), |(wh, ef), (wh_i, ef_i)| {
+            (wh + wh_i, ef + ef_i)
+        });
+    let mean_height = if ef_sum_with_height > 0.0 {
+        Some(weighted_height_sum / ef_sum_with_height)
     } else {
         None
     };
 
-    // Species composition
-    // (species, tpa_sum, ba_sum, weighted_dbh_sum, tree_count, height_sum, height_count)
-    type SpeciesAccum = (Species, f64, f64, f64, usize, f64, usize);
+    // Species composition — accumulate per-species stats across all plots
+    struct SpeciesAccum {
+        species: Species,
+        tpa_sum: f64,
+        ba_sum: f64,
+        weighted_dbh_sum: f64,
+        weighted_height_sum: f64,
+        height_ef_sum: f64,
+    }
+
     let mut species_data: HashMap<String, SpeciesAccum> = HashMap::new();
 
     for plot in &inventory.plots {
         for tree in plot.live_trees() {
             let entry = species_data
                 .entry(tree.species.code.clone())
-                .or_insert_with(|| (tree.species.clone(), 0.0, 0.0, 0.0, 0, 0.0, 0));
-            entry.1 += tree.expansion_factor; // TPA sum
-            entry.2 += tree.basal_area_per_acre(); // BA sum
-            entry.3 += tree.dbh * tree.expansion_factor; // weighted DBH sum
-            entry.4 += 1; // tree count
+                .or_insert_with(|| SpeciesAccum {
+                    species: tree.species.clone(),
+                    tpa_sum: 0.0,
+                    ba_sum: 0.0,
+                    weighted_dbh_sum: 0.0,
+                    weighted_height_sum: 0.0,
+                    height_ef_sum: 0.0,
+                });
+            entry.tpa_sum += tree.expansion_factor;
+            entry.ba_sum += tree.basal_area_per_acre();
+            entry.weighted_dbh_sum += tree.dbh * tree.expansion_factor;
             if let Some(h) = tree.height {
-                entry.5 += h;
-                entry.6 += 1;
+                entry.weighted_height_sum += h * tree.expansion_factor;
+                entry.height_ef_sum += tree.expansion_factor;
             }
         }
     }
 
     let mut species_comp: Vec<SpeciesComposition> = species_data
         .into_values()
-        .map(
-            |(species, tpa_sum, ba_sum, dbh_sum, _count, h_sum, h_count)| {
-                let tpa = tpa_sum / num_plots;
-                let ba = ba_sum / num_plots;
-                let mean_dbh = if tpa_sum > 0.0 {
-                    dbh_sum / tpa_sum
+        .map(|acc| {
+                let tpa = acc.tpa_sum / num_plots;
+                let ba = acc.ba_sum / num_plots;
+                let mean_dbh = if acc.tpa_sum > 0.0 {
+                    acc.weighted_dbh_sum / acc.tpa_sum
                 } else {
                     0.0
                 };
-                let mean_h = if h_count > 0 {
-                    Some(h_sum / h_count as f64)
+                let mean_h = if acc.height_ef_sum > 0.0 {
+                    Some(acc.weighted_height_sum / acc.height_ef_sum)
                 } else {
                     None
                 };
                 SpeciesComposition {
-                    species,
+                    species: acc.species,
                     tpa,
                     basal_area: ba,
                     percent_tpa: if total_tpa > 0.0 {

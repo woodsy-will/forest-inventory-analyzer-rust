@@ -54,9 +54,19 @@ impl actix_web::ResponseError for WebError {
                 "Internal Server Error",
             ),
         };
+        // For 5xx errors, log the real message but return a generic one to avoid
+        // leaking internal details (table names, SQL errors, file paths).
+        let details = if status.is_server_error() {
+            eprintln!("Internal error: {}", self.0);
+            "An internal error occurred. Please try again later.".to_string()
+        } else {
+            // 4xx errors (ValidationError, ParseError, NotFound, InsufficientData)
+            // are user-facing and safe to return verbatim.
+            self.0.to_string()
+        };
         HttpResponse::build(status).json(ErrorBody {
             error: error_type.to_string(),
-            details: self.0.to_string(),
+            details,
         })
     }
 }
@@ -739,6 +749,13 @@ pub async fn autofix(
 
     summary.total_fixes = fixes.len();
     summary.warnings_count = warnings.len();
+
+    // Persist the fixed rows back to pending storage so the latest state
+    // survives browser refresh or network retries.
+    let name = state
+        .get_pending_name(&body.id)?
+        .unwrap_or_else(|| "Unknown".to_string());
+    state.insert_pending(body.id, name, rows.clone())?;
 
     Ok(HttpResponse::Ok().json(AutofixResponse {
         trees: rows,

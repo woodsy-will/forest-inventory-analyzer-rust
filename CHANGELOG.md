@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`start.bat` launcher**: Double-click to start the web server and auto-open the browser — included in Windows zip and MSI distributions
 
 ### Changed
+- **Dependencies**: calamine 0.26 -> 0.36 (quick-xml 0.41, fixes RUSTSEC-2026-0194/0195), statrs 0.17 -> 0.19 (drops the unmaintained `paste` crate), actix-multipart 0.7 -> 0.8; actix-web built without the `http2` feature so the unpatched h2 0.3 line is no longer linked (RUSTSEC-2026-0258)
+- **MSRV**: 1.75 -> 1.85 (the `time` crate now requires edition 2024)
 - **QMD calculation corrected**: stand-level QMD now uses `sqrt(sum(EF * DBH^2) / sum(EF))` across all live trees instead of averaging per-plot QMDs, which was statistically incorrect
 - **CORS policy restricted**: `allowed_origin` now set to `http://localhost:{port}` instead of allowing all origins
 - **Eviction throttled**: TTL eviction queries run at most once per 60 seconds per table instead of on every database access

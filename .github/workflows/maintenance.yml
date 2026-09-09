@@ -1,0 +1,25 @@
+# Manual helper: refresh Cargo.lock and apply rustfmt, committing the result to the
+# branch it was run on. Use it after editing dependency versions in Cargo.toml.
+name: Maintenance (cargo update + fmt)
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo update
+      - run: cargo fmt --all
+      - name: Commit changes
+        run: |
+          if git diff --quiet; then echo "nothing to commit"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: refresh Cargo.lock and apply cargo fmt"
+          git push

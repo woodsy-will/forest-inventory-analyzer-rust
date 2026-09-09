@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Architecture documentation listed `TreeStatus::Ingrowth` but the actual enum variant is `Missing`
 
-## [0.1.0] - 2024-12-10
+## [0.1.0] - 2026-03-15
 
 ### Added
 - Core library with `ForestInventory`, `Plot`, `Tree`, `Species`, `TreeStatus` domain models

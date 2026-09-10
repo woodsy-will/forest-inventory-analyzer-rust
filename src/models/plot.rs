@@ -394,7 +394,9 @@ mod tests {
         let mut plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
         plot.slope_percent = Some(-5.0);
         let err = plot.validate().unwrap_err();
-        assert!(err.to_string().contains("slope_percent must be non-negative"));
+        assert!(err
+            .to_string()
+            .contains("slope_percent must be non-negative"));
     }
 
     #[test]
@@ -402,7 +404,9 @@ mod tests {
         let mut plot = make_plot(vec![make_tree(1, 12.0, Some(80.0), TreeStatus::Live, 5.0)]);
         plot.aspect_degrees = Some(400.0);
         let err = plot.validate().unwrap_err();
-        assert!(err.to_string().contains("aspect_degrees must be in 0..=360"));
+        assert!(err
+            .to_string()
+            .contains("aspect_degrees must be in 0..=360"));
     }
 
     #[test]

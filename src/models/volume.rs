@@ -115,35 +115,50 @@ mod tests {
 
     #[test]
     fn test_validate_nan_cuft_b1() {
-        let eq = VolumeEquation { cuft_b1: f64::NAN, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            cuft_b1: f64::NAN,
+            ..VolumeEquation::default()
+        };
         let err = eq.validate().unwrap_err();
         assert!(err.to_string().contains("cuft_b1 must not be NaN"));
     }
 
     #[test]
     fn test_validate_infinity_bdft_b1() {
-        let eq = VolumeEquation { bdft_b1: f64::INFINITY, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            bdft_b1: f64::INFINITY,
+            ..VolumeEquation::default()
+        };
         let err = eq.validate().unwrap_err();
         assert!(err.to_string().contains("bdft_b1 must not be infinite"));
     }
 
     #[test]
     fn test_validate_neg_infinity() {
-        let eq = VolumeEquation { bdft_b2: f64::NEG_INFINITY, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            bdft_b2: f64::NEG_INFINITY,
+            ..VolumeEquation::default()
+        };
         let err = eq.validate().unwrap_err();
         assert!(err.to_string().contains("bdft_b2 must not be infinite"));
     }
 
     #[test]
     fn test_validate_zero_coefficient() {
-        let eq = VolumeEquation { cuft_b1: 0.0, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            cuft_b1: 0.0,
+            ..VolumeEquation::default()
+        };
         let err = eq.validate().unwrap_err();
         assert!(err.to_string().contains("cuft_b1 must be positive"));
     }
 
     #[test]
     fn test_validate_negative_coefficient() {
-        let eq = VolumeEquation { bdft_min_dbh: -1.0, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            bdft_min_dbh: -1.0,
+            ..VolumeEquation::default()
+        };
         let err = eq.validate().unwrap_err();
         assert!(err.to_string().contains("bdft_min_dbh must be positive"));
     }
@@ -160,7 +175,10 @@ mod tests {
 
     #[test]
     fn test_compute_cuft_custom() {
-        let eq = VolumeEquation { cuft_b1: 0.003, ..VolumeEquation::default() };
+        let eq = VolumeEquation {
+            cuft_b1: 0.003,
+            ..VolumeEquation::default()
+        };
         // 0.003 * 256 * 100 = 76.8
         let vol = eq.compute_cuft(16.0, 100.0);
         assert!((vol - 76.8).abs() < 0.001);

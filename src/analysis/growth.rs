@@ -541,7 +541,10 @@ mod tests {
     fn test_from_str_exponential() {
         let model: GrowthModel = "exponential".parse().unwrap();
         match model {
-            GrowthModel::Exponential { annual_rate, mortality_rate } => {
+            GrowthModel::Exponential {
+                annual_rate,
+                mortality_rate,
+            } => {
                 assert!((annual_rate - 0.03).abs() < 1e-10);
                 assert!((mortality_rate - 0.005).abs() < 1e-10);
             }
@@ -562,7 +565,11 @@ mod tests {
     fn test_from_str_logistic() {
         let model: GrowthModel = "logistic".parse().unwrap();
         match model {
-            GrowthModel::Logistic { annual_rate, carrying_capacity, mortality_rate } => {
+            GrowthModel::Logistic {
+                annual_rate,
+                carrying_capacity,
+                mortality_rate,
+            } => {
                 assert!((annual_rate - 0.03).abs() < 1e-10);
                 assert!((carrying_capacity - 300.0).abs() < 1e-10);
                 assert!((mortality_rate - 0.005).abs() < 1e-10);
@@ -584,7 +591,10 @@ mod tests {
     fn test_from_str_linear() {
         let model: GrowthModel = "linear".parse().unwrap();
         match model {
-            GrowthModel::Linear { annual_increment, mortality_rate } => {
+            GrowthModel::Linear {
+                annual_increment,
+                mortality_rate,
+            } => {
                 assert!((annual_increment - 2.0).abs() < 1e-10);
                 assert!((mortality_rate - 0.5).abs() < 1e-10);
             }

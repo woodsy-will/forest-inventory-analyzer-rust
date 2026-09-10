@@ -122,9 +122,8 @@ impl AppConfig {
         }
 
         let content = std::fs::read_to_string(path)?;
-        let config: AppConfig = toml::from_str(&content).map_err(|e| {
-            ForestError::ParseError(format!("Failed to parse config file: {e}"))
-        })?;
+        let config: AppConfig = toml::from_str(&content)
+            .map_err(|e| ForestError::ParseError(format!("Failed to parse config file: {e}")))?;
         config.validate()?;
         Ok(config)
     }
@@ -269,7 +268,10 @@ path = "custom.db"
         let serialized = toml::to_string(&config).unwrap();
         let deserialized: AppConfig = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.server.port, config.server.port);
-        assert_eq!(deserialized.growth.default_model, config.growth.default_model);
+        assert_eq!(
+            deserialized.growth.default_model,
+            config.growth.default_model
+        );
     }
 
     #[test]
@@ -359,11 +361,7 @@ path = "custom.db"
     fn test_load_invalid_values_rejected() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("config.toml");
-        std::fs::write(
-            &path,
-            "[analysis]\nconfidence_level = 1.5\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "[analysis]\nconfidence_level = 1.5\n").unwrap();
         let result = AppConfig::load(&path);
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();

@@ -61,7 +61,11 @@ pub fn build_geojson_value(inventory: &ForestInventory) -> Value {
 }
 
 /// Write a forest inventory as a GeoJSON FeatureCollection file.
-pub fn write_geojson(inventory: &ForestInventory, path: &Path, pretty: bool) -> Result<(), ForestError> {
+pub fn write_geojson(
+    inventory: &ForestInventory,
+    path: &Path,
+    pretty: bool,
+) -> Result<(), ForestError> {
     let collection = build_geojson_value(inventory);
 
     let content = if pretty {

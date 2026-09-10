@@ -91,7 +91,12 @@ impl AppState {
 
     pub fn get_inventory(&self, id: &Uuid) -> Result<Option<ForestInventory>, ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "inventories", INVENTORY_TTL_SECS, &self.last_evict_inventories);
+        self.maybe_evict(
+            &conn,
+            "inventories",
+            INVENTORY_TTL_SECS,
+            &self.last_evict_inventories,
+        );
 
         let mut stmt = conn
             .prepare("SELECT data FROM inventories WHERE id = ?1")
@@ -119,7 +124,12 @@ impl AppState {
         inventory: ForestInventory,
     ) -> Result<(), ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "inventories", INVENTORY_TTL_SECS, &self.last_evict_inventories);
+        self.maybe_evict(
+            &conn,
+            "inventories",
+            INVENTORY_TTL_SECS,
+            &self.last_evict_inventories,
+        );
         evict_if_full(&conn, "inventories", MAX_INVENTORIES);
 
         let json = serde_json::to_string(&inventory)?;
@@ -133,7 +143,12 @@ impl AppState {
 
     pub fn get_pending_name(&self, id: &Uuid) -> Result<Option<String>, ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
+        self.maybe_evict(
+            &conn,
+            "pending_rows",
+            PENDING_TTL_SECS,
+            &self.last_evict_pending,
+        );
 
         let mut stmt = conn
             .prepare("SELECT name FROM pending_rows WHERE id = ?1")
@@ -144,7 +159,12 @@ impl AppState {
 
     pub fn has_pending(&self, id: &Uuid) -> Result<bool, ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
+        self.maybe_evict(
+            &conn,
+            "pending_rows",
+            PENDING_TTL_SECS,
+            &self.last_evict_pending,
+        );
 
         let mut stmt = conn
             .prepare("SELECT EXISTS(SELECT 1 FROM pending_rows WHERE id = ?1)")
@@ -162,7 +182,12 @@ impl AppState {
         rows: Vec<EditableTreeRow>,
     ) -> Result<(), ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
+        self.maybe_evict(
+            &conn,
+            "pending_rows",
+            PENDING_TTL_SECS,
+            &self.last_evict_pending,
+        );
         evict_if_full(&conn, "pending_rows", MAX_PENDING);
 
         let json = serde_json::to_string(&rows)?;
@@ -179,7 +204,12 @@ impl AppState {
         id: &Uuid,
     ) -> Result<Option<(String, Vec<EditableTreeRow>)>, ForestError> {
         let conn = self.lock_db()?;
-        self.maybe_evict(&conn, "pending_rows", PENDING_TTL_SECS, &self.last_evict_pending);
+        self.maybe_evict(
+            &conn,
+            "pending_rows",
+            PENDING_TTL_SECS,
+            &self.last_evict_pending,
+        );
 
         let mut stmt = conn
             .prepare("SELECT name, rows FROM pending_rows WHERE id = ?1")

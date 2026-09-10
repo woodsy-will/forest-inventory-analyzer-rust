@@ -46,30 +46,34 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
     }
 
     // Single-pass computation of all four per-plot means using fold.
-    let (sum_tpa, sum_ba, sum_vol_cuft, sum_vol_bdft) = inventory
-        .plots
-        .iter()
-        .fold((0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64), |(tpa, ba, vc, vb), plot| {
+    let (sum_tpa, sum_ba, sum_vol_cuft, sum_vol_bdft) = inventory.plots.iter().fold(
+        (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64),
+        |(tpa, ba, vc, vb), plot| {
             (
                 tpa + plot.trees_per_acre(),
                 ba + plot.basal_area_per_acre(),
                 vc + plot.volume_cuft_per_acre(),
                 vb + plot.volume_bdft_per_acre(),
             )
-        });
+        },
+    );
     let total_tpa = sum_tpa / num_plots;
     let total_ba = sum_ba / num_plots;
     let total_vol_cuft = sum_vol_cuft / num_plots;
     let total_vol_bdft = sum_vol_bdft / num_plots;
 
     // Stand-level QMD: sqrt(Σ(EF × DBH²) / Σ(EF)) across all live trees
-    let (sum_ef_dbh_sq, sum_ef) = inventory
-        .plots
-        .iter()
-        .flat_map(|p| p.live_trees())
-        .fold((0.0, 0.0), |(dbh_sq, ef), t| {
-            (dbh_sq + t.expansion_factor * t.dbh.powi(2), ef + t.expansion_factor)
-        });
+    let (sum_ef_dbh_sq, sum_ef) =
+        inventory
+            .plots
+            .iter()
+            .flat_map(|p| p.live_trees())
+            .fold((0.0, 0.0), |(dbh_sq, ef), t| {
+                (
+                    dbh_sq + t.expansion_factor * t.dbh.powi(2),
+                    ef + t.expansion_factor,
+                )
+            });
     let qmd = if sum_ef > 0.0 {
         (sum_ef_dbh_sq / sum_ef).sqrt()
     } else {
@@ -81,7 +85,10 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
         .plots
         .iter()
         .flat_map(|p| p.live_trees())
-        .filter_map(|t| t.height.map(|h| (h * t.expansion_factor, t.expansion_factor)))
+        .filter_map(|t| {
+            t.height
+                .map(|h| (h * t.expansion_factor, t.expansion_factor))
+        })
         .fold((0.0, 0.0_f64), |(wh, ef), (wh_i, ef_i)| {
             (wh + wh_i, ef + ef_i)
         });
@@ -128,40 +135,43 @@ pub fn compute_stand_metrics(inventory: &ForestInventory) -> StandMetrics {
     let mut species_comp: Vec<SpeciesComposition> = species_data
         .into_values()
         .map(|acc| {
-                let tpa = acc.tpa_sum / num_plots;
-                let ba = acc.ba_sum / num_plots;
-                let mean_dbh = if acc.tpa_sum > 0.0 {
-                    acc.weighted_dbh_sum / acc.tpa_sum
+            let tpa = acc.tpa_sum / num_plots;
+            let ba = acc.ba_sum / num_plots;
+            let mean_dbh = if acc.tpa_sum > 0.0 {
+                acc.weighted_dbh_sum / acc.tpa_sum
+            } else {
+                0.0
+            };
+            let mean_h = if acc.height_ef_sum > 0.0 {
+                Some(acc.weighted_height_sum / acc.height_ef_sum)
+            } else {
+                None
+            };
+            SpeciesComposition {
+                species: acc.species,
+                tpa,
+                basal_area: ba,
+                percent_tpa: if total_tpa > 0.0 {
+                    (tpa / total_tpa) * 100.0
                 } else {
                     0.0
-                };
-                let mean_h = if acc.height_ef_sum > 0.0 {
-                    Some(acc.weighted_height_sum / acc.height_ef_sum)
+                },
+                percent_basal_area: if total_ba > 0.0 {
+                    (ba / total_ba) * 100.0
                 } else {
-                    None
-                };
-                SpeciesComposition {
-                    species: acc.species,
-                    tpa,
-                    basal_area: ba,
-                    percent_tpa: if total_tpa > 0.0 {
-                        (tpa / total_tpa) * 100.0
-                    } else {
-                        0.0
-                    },
-                    percent_basal_area: if total_ba > 0.0 {
-                        (ba / total_ba) * 100.0
-                    } else {
-                        0.0
-                    },
-                    mean_dbh,
-                    mean_height: mean_h,
-                }
-            },
-        )
+                    0.0
+                },
+                mean_dbh,
+                mean_height: mean_h,
+            }
+        })
         .collect();
 
-    species_comp.sort_by(|a, b| b.basal_area.partial_cmp(&a.basal_area).unwrap_or(std::cmp::Ordering::Equal));
+    species_comp.sort_by(|a, b| {
+        b.basal_area
+            .partial_cmp(&a.basal_area)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     StandMetrics {
         total_tpa,

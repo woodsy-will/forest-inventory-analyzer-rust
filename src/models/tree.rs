@@ -168,8 +168,9 @@ impl Tree {
     /// Delegates the pure formula to [`VolumeEquation::compute_cuft`], then
     /// applies tree-level concerns (optional height, zero-guard, defect).
     pub fn volume_cuft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;                          // None height -> None
-        if self.dbh <= 0.0 || height <= 0.0 {               // guard: non-positive dims -> 0
+        let height = self.height?; // None height -> None
+        if self.dbh <= 0.0 || height <= 0.0 {
+            // guard: non-positive dims -> 0
             return Some(0.0);
         }
         let gross_volume = eq.compute_cuft(self.dbh, height); // delegate formula
@@ -209,8 +210,9 @@ impl Tree {
     /// Delegates the pure formula to [`VolumeEquation::compute_bdft`], then
     /// applies tree-level concerns (optional height, zero-height guard, defect).
     pub fn volume_bdft_with(&self, eq: &VolumeEquation) -> Option<f64> {
-        let height = self.height?;                           // None height -> None
-        if height <= 0.0 {                                    // guard: non-positive height -> 0
+        let height = self.height?; // None height -> None
+        if height <= 0.0 {
+            // guard: non-positive height -> 0
             return Some(0.0);
         }
         let gross_volume = eq.compute_bdft(self.dbh, height); // delegate formula (handles min_dbh + clamp)

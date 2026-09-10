@@ -50,7 +50,9 @@
                             Name='forest-analyzer.exe'
                             DiskId='1'
                             Source='target\release\forest-analyzer.exe'
-                            KeyPath='yes' />
+                            KeyPath='no' />
+                        <RemoveFolder Id='RemoveApplicationFolder' Directory='APPLICATIONFOLDER' On='uninstall' />
+                        <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='binary' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
                     <Component Id='launcher' Guid='*'>
@@ -59,7 +61,8 @@
                             Name='start.bat'
                             DiskId='1'
                             Source='start.bat'
-                            KeyPath='yes' />
+                            KeyPath='no' />
+                        <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='launcher' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
                     <Component Id='readme' Guid='*'>
@@ -68,7 +71,8 @@
                             Name='README.md'
                             DiskId='1'
                             Source='README.md'
-                            KeyPath='yes' />
+                            KeyPath='no' />
+                        <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='readme' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
                     <Component Id='changelog' Guid='*'>
@@ -77,7 +81,8 @@
                             Name='CHANGELOG.md'
                             DiskId='1'
                             Source='CHANGELOG.md'
-                            KeyPath='yes' />
+                            KeyPath='no' />
+                        <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='changelog' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
                     <Component Id='license' Guid='*'>
@@ -86,7 +91,8 @@
                             Name='LICENSE'
                             DiskId='1'
                             Source='LICENSE'
-                            KeyPath='yes' />
+                            KeyPath='no' />
+                        <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='license' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
                 </Directory>
             </Directory>

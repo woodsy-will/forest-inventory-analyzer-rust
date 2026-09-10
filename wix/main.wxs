@@ -44,7 +44,7 @@
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='LocalAppDataFolder' Name='AppData'>
                 <Directory Id='APPLICATIONFOLDER' Name='ForestAnalyzer'>
-                    <Component Id='binary' Guid='*'>
+                    <Component Id='binary' Guid='35FEA12A-9AA9-48EE-8054-7D362D014488'>
                         <File
                             Id='exe'
                             Name='forest-analyzer.exe'
@@ -55,7 +55,7 @@
                         <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='binary' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
-                    <Component Id='launcher' Guid='*'>
+                    <Component Id='launcher' Guid='1DD2642A-3802-4684-B94C-B66EBD2E4F48'>
                         <File
                             Id='bat'
                             Name='start.bat'
@@ -65,7 +65,7 @@
                         <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='launcher' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
-                    <Component Id='readme' Guid='*'>
+                    <Component Id='readme' Guid='AF94B521-E88F-43AA-AC59-0B5248FC9981'>
                         <File
                             Id='readme'
                             Name='README.md'
@@ -75,7 +75,7 @@
                         <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='readme' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
-                    <Component Id='changelog' Guid='*'>
+                    <Component Id='changelog' Guid='DDC0BC5C-330B-4C2E-9516-8F7FB8CFDE4D'>
                         <File
                             Id='changelog'
                             Name='CHANGELOG.md'
@@ -85,7 +85,7 @@
                         <RegistryValue Root='HKCU' Key='SoftwareForestAnalyzer' Name='changelog' Type='integer' Value='1' KeyPath='yes' />
                     </Component>
 
-                    <Component Id='license' Guid='*'>
+                    <Component Id='license' Guid='002C6406-3AF9-408A-AF5E-B891FAD5BE9C'>
                         <File
                             Id='license'
                             Name='LICENSE'

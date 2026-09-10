@@ -1,6 +1,6 @@
 [package]
 name = "forest_inventory_analyzer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.85.0"
 description = "A comprehensive forest inventory analysis tool with statistical modeling, visualization, and growth projections"

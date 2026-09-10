@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-09
+
 ### Added
 - **Cruise format auto-detection**: Excel files from ArcGIS Survey123/Field Maps with `Plot_form` sheets are automatically recognized and imported, with BAF-to-TPA conversion for variable radius plots, per-log defect summation, and species code derivation
 - **Height sanity check**: Tree heights exceeding 300 ft are flagged as data entry errors and excluded from volume calculations
@@ -58,3 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture documentation (`docs/architecture.md`)
 - Runnable examples: `basic_analysis`, `growth_projection`, `format_conversion`
 - 307 tests: 231 unit, 16 CLI integration, 53 library integration, 7 doc-tests
+
+[Unreleased]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/releases/tag/v0.1.0

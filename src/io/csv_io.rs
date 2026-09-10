@@ -237,8 +237,6 @@ pub(crate) fn rows_to_inventory(name: &str, rows: &[EditableTreeRow]) -> ForestI
     inventory
 }
 
-
-
 /// Parse CSV leniently: collect all validation issues instead of failing on the first.
 ///
 /// CSV **format** errors (missing columns, type mismatches) are still fatal.
@@ -269,7 +267,10 @@ pub(crate) fn parse_csv_lenient(
                     tree_id: csv_row.tree_id,
                     row_index,
                     field: Cow::Borrowed("status"),
-                    message: Cow::Owned(format!("Unknown tree status '{}', defaulting to Live", status_str)),
+                    message: Cow::Owned(format!(
+                        "Unknown tree status '{}', defaulting to Live",
+                        status_str
+                    )),
                 });
                 TreeStatus::Live
             }

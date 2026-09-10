@@ -385,17 +385,26 @@ mod tests {
         let mut inv = ForestInventory::new("Multi-Stand");
 
         // Stand 13, plot 1
-        let mut p1 = make_plot_with_trees(13001, vec![make_tree(13001, df.clone(), 14.0, TreeStatus::Live)]);
+        let mut p1 = make_plot_with_trees(
+            13001,
+            vec![make_tree(13001, df.clone(), 14.0, TreeStatus::Live)],
+        );
         p1.stand_id = Some(13);
         inv.plots.push(p1);
 
         // Stand 13, plot 2
-        let mut p2 = make_plot_with_trees(13002, vec![make_tree(13002, df.clone(), 16.0, TreeStatus::Live)]);
+        let mut p2 = make_plot_with_trees(
+            13002,
+            vec![make_tree(13002, df.clone(), 16.0, TreeStatus::Live)],
+        );
         p2.stand_id = Some(13);
         inv.plots.push(p2);
 
         // Stand 14, plot 1
-        let mut p3 = make_plot_with_trees(14001, vec![make_tree(14001, df.clone(), 18.0, TreeStatus::Live)]);
+        let mut p3 = make_plot_with_trees(
+            14001,
+            vec![make_tree(14001, df.clone(), 18.0, TreeStatus::Live)],
+        );
         p3.stand_id = Some(14);
         inv.plots.push(p3);
 
@@ -414,7 +423,10 @@ mod tests {
         let df = make_species("DF", "Douglas Fir");
         let mut inv = ForestInventory::new("Stand Metrics");
 
-        let mut p1 = make_plot_with_trees(14001, vec![make_tree(14001, df.clone(), 16.0, TreeStatus::Live)]);
+        let mut p1 = make_plot_with_trees(
+            14001,
+            vec![make_tree(14001, df.clone(), 16.0, TreeStatus::Live)],
+        );
         p1.stand_id = Some(14);
         inv.plots.push(p1);
 

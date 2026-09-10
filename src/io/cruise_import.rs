@@ -91,9 +91,7 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
         .collect();
 
     if cruise_sheets.is_empty() {
-        return Err(ForestError::ParseError(
-            "No Plot_form sheets found".into(),
-        ));
+        return Err(ForestError::ParseError("No Plot_form sheets found".into()));
     }
 
     let mut all_rows = Vec::new();
@@ -105,9 +103,9 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
 
         let mut rows = range.rows();
 
-        let header_row = rows.next().ok_or_else(|| {
-            ForestError::Excel(format!("Sheet '{sheet_name}' is empty"))
-        })?;
+        let header_row = rows
+            .next()
+            .ok_or_else(|| ForestError::Excel(format!("Sheet '{sheet_name}' is empty")))?;
         let headers: Vec<String> = header_row
             .iter()
             .map(|c| c.to_string().trim().to_string())
@@ -128,9 +126,7 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
             ))
         })?;
         let height_col = find_col(&headers, "Total Height").ok_or_else(|| {
-            ForestError::ParseError(format!(
-                "'Total Height' column not found in {sheet_name}"
-            ))
+            ForestError::ParseError(format!("'Total Height' column not found in {sheet_name}"))
         })?;
         let method_col = find_col(&headers, "Sampling");
         let ef_col = find_col(&headers, "Expansion");
@@ -140,9 +136,8 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
             .or_else(|| find_col(&headers, "Tree_Class"));
 
         for row in rows {
-            let get_f64 = |idx: usize| -> f64 {
-                row.get(idx).and_then(|c| c.get_float()).unwrap_or(0.0)
-            };
+            let get_f64 =
+                |idx: usize| -> f64 { row.get(idx).and_then(|c| c.get_float()).unwrap_or(0.0) };
             let get_string = |idx: usize| -> String {
                 row.get(idx)
                     .map(|c| c.to_string().trim().to_string())
@@ -160,14 +155,10 @@ fn parse_cruise_sheets<RS: std::io::Read + std::io::Seek>(
                 species_name: get_string(species_col),
                 dbh: get_f64(dbh_col),
                 height: get_f64(height_col),
-                sampling_method: method_col
-                    .map(&get_string)
-                    .unwrap_or_default(),
+                sampling_method: method_col.map(&get_string).unwrap_or_default(),
                 raw_ef: ef_col.map(&get_f64).unwrap_or(0.0),
                 total_defect_pct,
-                status_str: status_col
-                    .map(&get_string)
-                    .unwrap_or_default(),
+                status_str: status_col.map(&get_string).unwrap_or_default(),
             });
         }
     }
@@ -218,9 +209,8 @@ pub fn read_cruise_excel<RS: std::io::Read + std::io::Seek>(
         });
 
         // Null/zero DBH rows represent empty-plot markers — keep the plot but skip the tree
-        let is_null = cr.dbh <= 0.0
-            || cr.species_name.to_lowercase() == "null"
-            || cr.species_name.is_empty();
+        let is_null =
+            cr.dbh <= 0.0 || cr.species_name.to_lowercase() == "null" || cr.species_name.is_empty();
         if is_null {
             continue;
         }
@@ -294,9 +284,8 @@ pub fn parse_cruise_lenient<RS: std::io::Read + std::io::Seek>(
         let key = (cr.stand_id, cr.plot_id);
         let composite_id = cr.stand_id * 100_000 + cr.plot_id;
 
-        let is_null = cr.dbh <= 0.0
-            || cr.species_name.to_lowercase() == "null"
-            || cr.species_name.is_empty();
+        let is_null =
+            cr.dbh <= 0.0 || cr.species_name.to_lowercase() == "null" || cr.species_name.is_empty();
         if is_null {
             // Don't add a row, but track the plot via the row_index
             row_index += 1;

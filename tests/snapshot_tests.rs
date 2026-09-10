@@ -5,8 +5,8 @@ use forest_inventory_analyzer::{
     },
     models::{ForestInventory, Plot, Species, Tree, TreeStatus},
     visualization::{
-        format_diameter_histogram, format_growth_table, format_species_table,
-        format_stand_summary, format_statistics_table,
+        format_diameter_histogram, format_growth_table, format_species_table, format_stand_summary,
+        format_statistics_table,
     },
 };
 

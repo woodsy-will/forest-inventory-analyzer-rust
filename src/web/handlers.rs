@@ -141,10 +141,7 @@ pub async fn upload(
             if bytes.len() + chunk.len() > max_size {
                 return Ok(HttpResponse::PayloadTooLarge().json(ErrorBody {
                     error: "Payload Too Large".to_string(),
-                    details: format!(
-                        "Upload exceeds maximum allowed size of {} bytes",
-                        max_size
-                    ),
+                    details: format!("Upload exceeds maximum allowed size of {} bytes", max_size),
                 }));
             }
             bytes.extend_from_slice(&chunk);
@@ -432,10 +429,17 @@ pub async fn autofix(
     // If the majority of DBH values exceed the plausible inch range but fall
     // within a plausible cm range, the dataset is likely metric.
     let dbh_values: Vec<f64> = rows.iter().map(|r| r.dbh.abs()).collect();
-    let large_dbh_count = dbh_values.iter().filter(|&&d| d > MAX_PLAUSIBLE_DBH_IN).count();
+    let large_dbh_count = dbh_values
+        .iter()
+        .filter(|&&d| d > MAX_PLAUSIBLE_DBH_IN)
+        .count();
     let plausible_cm_count = dbh_values
         .iter()
-        .filter(|&&d| d > MAX_PLAUSIBLE_DBH_IN && (d * CM_TO_IN) >= 1.0 && (d * CM_TO_IN) <= MAX_PLAUSIBLE_DBH_IN)
+        .filter(|&&d| {
+            d > MAX_PLAUSIBLE_DBH_IN
+                && (d * CM_TO_IN) >= 1.0
+                && (d * CM_TO_IN) <= MAX_PLAUSIBLE_DBH_IN
+        })
         .count();
     let dataset_likely_cm = rows.len() >= 3
         && large_dbh_count > rows.len() / 2
@@ -446,7 +450,10 @@ pub async fn autofix(
         .iter()
         .filter_map(|r| r.height.map(|h| h.abs()))
         .collect();
-    let tall_count = height_values.iter().filter(|&&h| h > MAX_TREE_HEIGHT_FT).count();
+    let tall_count = height_values
+        .iter()
+        .filter(|&&h| h > MAX_TREE_HEIGHT_FT)
+        .count();
     // Heights >300 that look like meters (i.e. original value 92-300m → 300-984ft)
     // are less common; instead detect if most heights are in a plausible meter range (1-100m)
     let meter_range_count = height_values
@@ -1678,7 +1685,9 @@ mod tests {
     async fn test_autofix_negative_dbh() {
         let body = run_autofix(vec![make_row(|r| r.dbh = -14.0)]).await;
         let fixes = body["fixes"].as_array().unwrap();
-        assert!(fixes.iter().any(|f| f["field"] == "dbh" && f["fixed"] == "14"));
+        assert!(fixes
+            .iter()
+            .any(|f| f["field"] == "dbh" && f["fixed"] == "14"));
         assert_eq!(body["trees"][0]["dbh"], 14.0);
     }
 
@@ -1712,7 +1721,9 @@ mod tests {
     async fn test_autofix_status_normalization() {
         let body = run_autofix(vec![make_row(|r| r.status = "alive".to_string())]).await;
         let fixes = body["fixes"].as_array().unwrap();
-        assert!(fixes.iter().any(|f| f["field"] == "status" && f["fixed"] == "Live"));
+        assert!(fixes
+            .iter()
+            .any(|f| f["field"] == "status" && f["fixed"] == "Live"));
         assert_eq!(body["trees"][0]["status"], "Live");
     }
 
@@ -1775,9 +1786,9 @@ mod tests {
         ];
         let body = run_autofix(rows).await;
         let warnings = body["warnings"].as_array().unwrap();
-        assert!(warnings
-            .iter()
-            .any(|w| w["field"] == "tree_id" && w["message"].as_str().unwrap().contains("Duplicate")));
+        assert!(warnings.iter().any(
+            |w| w["field"] == "tree_id" && w["message"].as_str().unwrap().contains("Duplicate")
+        ));
     }
 
     #[actix_web::test]

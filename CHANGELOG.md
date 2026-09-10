@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-09
+
 ### Added
 - **Cruise format auto-detection**: Excel files from ArcGIS Survey123/Field Maps with `Plot_form` sheets are automatically recognized and imported, with BAF-to-TPA conversion for variable radius plots, per-log defect summation, and species code derivation
 - **Height sanity check**: Tree heights exceeding 300 ft are flagged as data entry errors and excluded from volume calculations
@@ -22,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`start.bat` launcher**: Double-click to start the web server and auto-open the browser — included in Windows zip and MSI distributions
 
 ### Changed
+- **Dependencies**: calamine 0.26 -> 0.36 (quick-xml 0.41, fixes RUSTSEC-2026-0194/0195), statrs 0.17 -> 0.19 (drops the unmaintained `paste` crate), actix-multipart 0.7 -> 0.8; actix-web built without the `http2` feature so the unpatched h2 0.3 line is no longer linked (RUSTSEC-2026-0258)
+- **MSRV**: 1.75 -> 1.89 (`time` needs edition 2024; `actix-codec`, `nalgebra` and `statrs` need rustc 1.88-1.89)
 - **QMD calculation corrected**: stand-level QMD now uses `sqrt(sum(EF * DBH^2) / sum(EF))` across all live trees instead of averaging per-plot QMDs, which was statistically incorrect
 - **CORS policy restricted**: `allowed_origin` now set to `http://localhost:{port}` instead of allowing all origins
 - **Eviction throttled**: TTL eviction queries run at most once per 60 seconds per table instead of on every database access
@@ -32,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Architecture documentation listed `TreeStatus::Ingrowth` but the actual enum variant is `Missing`
 
-## [0.1.0] - 2024-12-10
+## [0.1.0] - 2026-03-15
 
 ### Added
 - Core library with `ForestInventory`, `Plot`, `Tree`, `Species`, `TreeStatus` domain models
@@ -56,3 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Architecture documentation (`docs/architecture.md`)
 - Runnable examples: `basic_analysis`, `growth_projection`, `format_conversion`
 - 307 tests: 231 unit, 16 CLI integration, 53 library integration, 7 doc-tests
+
+[Unreleased]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/releases/tag/v0.1.0

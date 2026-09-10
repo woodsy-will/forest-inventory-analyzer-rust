@@ -91,7 +91,9 @@ pub async fn start_server(config: AppConfig) -> std::io::Result<()> {
         if e.kind() == std::io::ErrorKind::AddrInUse {
             std::io::Error::new(
                 std::io::ErrorKind::AddrInUse,
-                format!("Port {port} is already in use. Change port in config.toml or use --port flag.")
+                format!(
+                    "Port {port} is already in use. Change port in config.toml or use --port flag."
+                ),
             )
         } else {
             e

@@ -299,7 +299,10 @@ pub(crate) fn parse_excel_lenient(
                     tree_id,
                     row_index,
                     field: Cow::Borrowed("status"),
-                    message: Cow::Owned(format!("Unknown tree status '{}', defaulting to Live", status_str)),
+                    message: Cow::Owned(format!(
+                        "Unknown tree status '{}', defaulting to Live",
+                        status_str
+                    )),
                 });
                 TreeStatus::Live
             }

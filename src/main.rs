@@ -70,9 +70,9 @@ fn save_inventory(
         "json" => io::write_json(inventory, path, pretty)?,
         "xlsx" => io::write_excel(inventory, path)?,
         "geojson" => io::write_geojson(inventory, path, pretty)?,
-        _ => anyhow::bail!(
-            "Unsupported output format: .{ext}. Use .csv, .json, .xlsx, or .geojson"
-        ),
+        _ => {
+            anyhow::bail!("Unsupported output format: .{ext}. Use .csv, .json, .xlsx, or .geojson")
+        }
     }
     Ok(())
 }
@@ -291,9 +291,8 @@ fn main() -> Result<()> {
 
             // Parse the model name into a GrowthModel with defaults, then
             // override individual fields with explicit CLI arguments.
-            let mut growth_model: GrowthModel = model.parse().map_err(|e| {
-                anyhow::anyhow!("{e}")
-            })?;
+            let mut growth_model: GrowthModel =
+                model.parse().map_err(|e| anyhow::anyhow!("{e}"))?;
 
             // Apply CLI overrides for rate/capacity/mortality (only when explicitly provided)
             match &mut growth_model {
@@ -301,24 +300,38 @@ fn main() -> Result<()> {
                     annual_rate,
                     mortality_rate,
                 } => {
-                    if let Some(r) = rate { *annual_rate = r; }
-                    if let Some(m) = mortality { *mortality_rate = m; }
+                    if let Some(r) = rate {
+                        *annual_rate = r;
+                    }
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
                 }
                 GrowthModel::Logistic {
                     annual_rate,
                     carrying_capacity,
                     mortality_rate,
                 } => {
-                    if let Some(r) = rate { *annual_rate = r; }
-                    if let Some(c) = capacity { *carrying_capacity = c; }
-                    if let Some(m) = mortality { *mortality_rate = m; }
+                    if let Some(r) = rate {
+                        *annual_rate = r;
+                    }
+                    if let Some(c) = capacity {
+                        *carrying_capacity = c;
+                    }
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
                 }
                 GrowthModel::Linear {
                     annual_increment,
                     mortality_rate,
                 } => {
-                    if let Some(r) = rate { *annual_increment = r; }
-                    if let Some(m) = mortality { *mortality_rate = m; }
+                    if let Some(r) = rate {
+                        *annual_increment = r;
+                    }
+                    if let Some(m) = mortality {
+                        *mortality_rate = m;
+                    }
                 }
             }
 
@@ -386,7 +399,10 @@ fn main() -> Result<()> {
             let mut failed = 0;
 
             for file in &files {
-                let name = file.file_stem().and_then(|s| s.to_str()).unwrap_or("unknown");
+                let name = file
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown");
                 match load_inventory(file) {
                     Ok(inventory) => {
                         let metrics = compute_stand_metrics(&inventory);

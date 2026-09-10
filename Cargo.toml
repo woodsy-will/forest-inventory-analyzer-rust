@@ -1,8 +1,8 @@
 [package]
 name = "forest_inventory_analyzer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.75.0"
+rust-version = "1.89.0"
 description = "A comprehensive forest inventory analysis tool with statistical modeling, visualization, and growth projections"
 license = "MIT"
 readme = "README.md"
@@ -29,11 +29,11 @@ clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 csv = "1"
-calamine = "0.26"
+calamine = "0.36"
 rust_xlsxwriter = "0.79"
 
 # Statistics & Math
-statrs = "0.17"
+statrs = "0.19"
 
 # Error handling
 thiserror = "2"
@@ -54,8 +54,8 @@ toml = "0.8"
 tempfile = "3"
 
 # Web (optional, gated behind "web" feature)
-actix-web = { version = "4", optional = true }
-actix-multipart = { version = "0.7", optional = true }
+actix-web = { version = "4", default-features = false, features = ["macros"], optional = true }  # no http2: drops h2 0.3 (RUSTSEC-2026-0258); the server only binds localhost
+actix-multipart = { version = "0.8", optional = true }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
 uuid = { version = "1", features = ["v4", "serde"], optional = true }
 futures = { version = "0.3", optional = true }

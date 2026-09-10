@@ -34,9 +34,9 @@ fn arb_species() -> impl Strategy<Value = Species> {
 fn arb_tree(plot_id: u32) -> impl Strategy<Value = Tree> {
     (
         arb_species(),
-        1.0f64..80.0,              // dbh: 1 to 80 inches
+        1.0f64..80.0,                     // dbh: 1 to 80 inches
         prop::option::of(10.0f64..250.0), // height: 10 to 250 feet
-        1.0f64..20.0,              // expansion_factor
+        1.0f64..20.0,                     // expansion_factor
     )
         .prop_map(move |(species, dbh, height, ef)| Tree {
             tree_id: 1,

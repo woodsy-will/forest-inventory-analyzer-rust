@@ -3,6 +3,8 @@
 name: Maintenance (cargo update + fmt)
 on:
   workflow_dispatch:
+  push:
+    branches: [fix/ci-and-release]
 permissions:
   contents: write
 jobs:

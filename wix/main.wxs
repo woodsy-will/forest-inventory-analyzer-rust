@@ -7,7 +7,7 @@
 
   Local build:
     cargo install cargo-wix
-    cargo wix --nocapture
+    cargo wix (add the nocapture flag to see the WiX tool output)
 
   Manual build:
     candle.exe wix/main.wxs -out target/wix/main.wixobj

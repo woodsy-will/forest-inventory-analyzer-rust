@@ -2,7 +2,7 @@
 name = "forest_inventory_analyzer"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 description = "A comprehensive forest inventory analysis tool with statistical modeling, visualization, and growth projections"
 license = "MIT"
 readme = "README.md"

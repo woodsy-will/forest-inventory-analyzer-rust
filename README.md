@@ -2,10 +2,11 @@
 
 [![CI](https://github.com/woodsy-will/forest-inventory-analyzer-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/woodsy-will/forest-inventory-analyzer-rust/actions/workflows/ci.yml)
 
-A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON, and Excel formats with statistical analysis, growth projections, text-based visualization, and an optional web UI.
+A forest inventory analysis tool built in Rust: a cruise compiler with a command line and a web dashboard. Supports CSV, JSON, and Excel formats with statistical analysis, growth projections, text-based visualization, and an optional web UI.
 
 ## Features
 
+- **Cruise Import** - Survey123 and Field Maps plot exports with BAF expansion for variable-radius plots
 - **Stand Metrics** - Trees per acre, basal area, volume (cubic & board feet), quadratic mean diameter
 - **Species Composition** - Breakdown by species with percentage of TPA and basal area
 - **Statistical Analysis** - Confidence intervals, sampling error, standard error using Student's t-distribution
@@ -151,7 +152,7 @@ The expected CSV format includes these columns:
 | plot_id | integer | Yes | Plot identifier |
 | tree_id | integer | Yes | Tree identifier within plot |
 | species_code | string | Yes | Species code (e.g., "DF") |
-| species_name | string | Yes | Common name (e.g., "Douglas Fir") |
+| species_name | string | Yes | Common name (e.g., "Douglas-fir") |
 | dbh | float | Yes | Diameter at breast height (inches) |
 | height | float | No | Total height (feet) |
 | crown_ratio | float | No | Crown ratio (0.0 - 1.0) |

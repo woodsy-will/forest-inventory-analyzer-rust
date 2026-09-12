@@ -3,14 +3,13 @@ name = "forest_inventory_analyzer"
 version = "0.2.0"
 edition = "2021"
 rust-version = "1.89.0"
-description = "A comprehensive forest inventory analysis tool with statistical modeling, visualization, and growth projections"
+description = "Forest inventory analysis tool: cruise compiler with statistical modeling, visualization, and growth projections"
 license = "MIT"
 readme = "README.md"
 keywords = ["forestry", "inventory", "analysis", "statistics", "ecology"]
 categories = ["science", "command-line-utilities"]
 repository = "https://github.com/woodsy-will/forest-inventory-analyzer-rust"
 homepage = "https://github.com/woodsy-will/forest-inventory-analyzer-rust"
-documentation = "https://docs.rs/forest_inventory_analyzer"
 exclude = [".github/", ".claude/", "data/", "forest_analyzer.db"]
 
 [lib]

@@ -72,7 +72,7 @@ Use `edition = "2021"` (not 2024) for compatibility.
 ## Commands
 
 ```bash
-cargo test --all-features          # 307 tests
+cargo test --all-features          # 355 test functions (unit, CLI, library, proptest, snapshot, doc)
 cargo clippy --all-features        # lint
 cargo run --all-features -- serve  # web UI on :8080
 cargo run -- analyze --input file.csv
@@ -96,7 +96,7 @@ This builds binaries for 4 platforms (Windows, Linux, macOS Intel, macOS ARM), c
 
 ## Test Coverage
 
-- 231 unit tests (models, analysis, I/O, config, error, visualization, web handlers, web state, cruise import)
-- 16 CLI integration tests (assert_cmd)
+- 265 unit tests (models, analysis, I/O, config, error, visualization, web handlers, web state, cruise import)
+- 19 CLI integration tests (assert_cmd)
 - 53 library integration tests (end-to-end workflows, format conversion, edge cases)
 - 7 doc-tests on public API methods

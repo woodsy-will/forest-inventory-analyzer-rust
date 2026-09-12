@@ -59,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD pipeline (GitHub Actions) with cross-platform testing, clippy, and fmt checks
 - Architecture documentation (`docs/architecture.md`)
 - Runnable examples: `basic_analysis`, `growth_projection`, `format_conversion`
-- 307 tests: 231 unit, 16 CLI integration, 53 library integration, 7 doc-tests
+- 355 test functions at v0.2.0: 265 unit, 19 CLI integration, 53 library integration, 6 property-based, 5 snapshot, 7 doc-tests
 
 [Unreleased]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/woodsy-will/forest-inventory-analyzer-rust/compare/v0.1.0...v0.2.0

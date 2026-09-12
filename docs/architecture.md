@@ -104,7 +104,7 @@ Actix Web server providing a REST API and embedded single-page dashboard.
 
 | Component | Description |
 |-----------|-------------|
-| `start_server(port)` | Configures routes, payload limits (50 MB), and launches the server |
+| `start_server(config: AppConfig)` | Configures routes, payload limits (50 MB), and launches the server |
 | `handlers.rs` | Request handlers: upload, validate, metrics, statistics, distribution, growth, export |
 | `state.rs` | `AppState` with SQLite-backed persistence (inventories + pending editable rows) |
 | `static/` | Embedded HTML/JS/CSS dashboard with Chart.js visualizations |
@@ -115,6 +115,7 @@ API endpoints:
 - `GET /health` — health check (200 OK) for load balancers and uptime monitors
 - `POST /api/upload` — multipart file upload (CSV/JSON/Excel)
 - `POST /api/validate` — revalidate edited rows and promote to inventory
+- `POST /api/autofix` — apply automatic fixes to flagged rows
 - `GET /api/{id}/metrics` — stand metrics JSON
 - `GET /api/{id}/statistics?confidence=0.95` — sampling statistics JSON
 - `GET /api/{id}/distribution?class_width=2` — diameter distribution JSON
@@ -153,7 +154,7 @@ All fields have defaults; the config file is entirely optional. CLI arguments ov
 
 ### Error (`src/error.rs`)
 
-`ForestError` enum with 9 variants:
+`ForestError` enum with 10 variants:
 
 | Variant | Description |
 |---------|-------------|
@@ -184,7 +185,7 @@ Disable with `cargo build --no-default-features` for a minimal library + CLI wit
 | Statistics | `statrs` |
 | Error handling | `thiserror`, `anyhow` |
 | Output | `comfy-table`, `colored` |
-| Logging | `log`, `env_logger` |
+| Logging | `tracing`, `tracing-subscriber` |
 | Configuration | `toml` |
 | Temp files | `tempfile` |
 | Web (optional) | `actix-web`, `actix-multipart`, `actix-cors`, `tokio`, `uuid`, `futures`, `mime`, `rusqlite` |

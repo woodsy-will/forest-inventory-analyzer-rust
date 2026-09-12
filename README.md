@@ -25,7 +25,7 @@ A comprehensive forest inventory analysis tool built in Rust. Supports CSV, JSON
 Download the latest release from [GitHub Releases](https://github.com/woodsy-will/forest-inventory-analyzer-rust/releases).
 
 **Windows (recommended)**:
-- **MSI installer** — run `forest-analyzer-x86_64-pc-windows-msvc.msi`, installs to `%LocalAppData%\ForestAnalyzer` with Start Menu and Desktop shortcuts (no admin required)
+- **MSI installer** — run `forest-analyzer-0.2.0-x86_64-pc-windows-msvc.msi` (version number changes with each release), installs to `%LocalAppData%\ForestAnalyzer` with Start Menu and Desktop shortcuts (no admin required)
 - **ZIP archive** — extract and double-click `start.bat` to launch the web dashboard
 
 **macOS**:
@@ -200,7 +200,7 @@ use forest_inventory_analyzer::{
 
 fn main() -> anyhow::Result<()> {
     // Load data
-    let inventory = CsvFormat.read("inventory.csv")?;
+    let inventory = CsvFormat.read(std::path::Path::new("inventory.csv"))?;
 
     // Compute metrics via the Analyzer
     let analyzer = Analyzer::new(&inventory);
@@ -232,6 +232,21 @@ cargo fmt
 # Build documentation
 cargo doc --open
 ```
+
+## Methods and limitations
+
+- **Basal area, trees per acre, QMD and sampling statistics** use the standard forms: BA = 0.005454 x DBH^2 per tree,
+  TPA = BAF / BA_tree for variable-radius plots, QMD = sqrt(BA / (0.005454 x TPA)), and a two-sided Student's t interval on
+  plot means (df = n - 1).
+- **Volume equations are generic placeholders, not published regional equations.** The built-in cubic-foot form is
+  V = 0.002454 x DBH^2 x H (a combined-variable approximation with total height) and the board-foot form labelled
+  "Scribner" is V = 0.01159 x DBH^2 x H - 4 x DBH. Neither is taken from a published species or regional table. For any
+  real appraisal, replace them through `VolumeEquation` with the equations your region uses (for example the PNW-FIA
+  tarif or regional Scribner equations) before relying on the volume columns.
+- **Growth projections** are illustrative curves (linear, exponential, logistic with a mortality term), not a calibrated
+  growth-and-yield model such as FVS.
+- **Installers are unsigned.** Windows SmartScreen and macOS Gatekeeper will warn on first launch; verify the
+  download against the `.sha256` file published beside each asset.
 
 ## License
 
